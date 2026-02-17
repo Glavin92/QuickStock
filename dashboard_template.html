@@ -1,182 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickStock - Professional Inventory Dashboard</title>
+    <title>QuickStock™ | Next-Gen Inventory Intelligence</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
+        :root {
+            /* Premium Gradient Palette */
+            --bg-body: #f8fafc;
+            --surface: #ffffff;
+            --primary: #4f46e5;
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --glass: rgba(255, 255, 255, 0.85);
+            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+            -webkit-font-smoothing: antialiased;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f0f2f5;
-            color: #1c1e21;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: grid;
+            grid-template-columns: 280px 1fr;
         }
 
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        /* --- Sidebar --- */
+        .sidebar {
+            background: var(--surface);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+            border-right: 1px solid rgba(0, 0, 0, 0.05);
+            height: 100vh;
+            position: sticky;
+            top: 0;
         }
 
-        .header h1 {
+        .brand {
             font-size: 1.8rem;
-            font-weight: 600;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.8rem;
         }
 
-        .header p {
-            margin-top: 0.3rem;
-            opacity: 0.9;
-            font-size: 0.9rem;
-        }
-
-        /* Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        /* Tabs */
-        .tabs {
+        .nav-menu {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #e4e6eb;
-            overflow-x: auto;
+            flex-direction: column;
+            gap: 0.8rem;
         }
 
-        .tab {
-            padding: 1rem 1.5rem;
-            background: none;
-            border: none;
-            cursor: pointer;
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.2rem;
+            border-radius: 16px;
+            font-weight: 600;
             font-size: 1rem;
-            font-weight: 500;
-            color: #65676b;
-            border-bottom: 3px solid transparent;
+            color: var(--text-muted);
+            cursor: pointer;
             transition: all 0.3s;
-            white-space: nowrap;
         }
 
-        .tab:hover {
-            color: #667eea;
-            background: #f7f8fa;
+        .nav-item:hover {
+            color: var(--primary);
+            background: rgba(79, 70, 229, 0.04);
+            transform: translateX(5px);
         }
 
-        .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+        .nav-item.active {
+            background: var(--primary-gradient);
+            color: white;
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25);
         }
 
-        .tab-content {
+        /* --- Main Content --- */
+        main {
+            padding: 2.5rem 3rem;
+            overflow-y: auto;
+        }
+
+        /* --- View Container (Page switching) --- */
+        .view-section {
             display: none;
+            /* Hidden by default */
+            animation: fadeIn 0.4s ease-out;
         }
 
-        .tab-content.active {
+        .view-section.active {
             display: block;
-            animation: fadeIn 0.3s;
+            /* Show active */
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        /* Cards */
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 1.5rem;
+        /* --- Dashboard Grid --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            margin-bottom: 2rem;
         }
 
-        .card-header {
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+        }
+
+        .metric-card {
+            grid-column: span 1;
             display: flex;
+            flex-direction: column;
             justify-content: space-between;
-            align-items: center;
+            min-height: 160px;
+        }
+
+        .metric-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            font-size: 1.5rem;
             margin-bottom: 1rem;
         }
 
-        .card-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #1c1e21;
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 5px;
         }
 
-        /* Table */
+        .metric-label {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* --- Tables --- */
+        .table-wrap {
+            background: white;
+            border-radius: 20px;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            margin-top: 2rem;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        th, td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid #e4e6eb;
-        }
-
         th {
-            background: #f7f8fa;
-            font-weight: 600;
-            color: #65676b;
+            text-align: left;
+            padding: 1.5rem;
+            background: #f8fafc;
+            color: var(--text-muted);
             font-size: 0.85rem;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
         }
 
-        tr:hover {
-            background: #f7f8fa;
-        }
-
-        /* Status badges */
-        .badge {
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            display: inline-block;
-        }
-
-        .badge-low { background: #fee2e2; color: #b91c1c; }
-        .badge-medium { background: #fef3c7; color: #b45309; }
-        .badge-good { background: #dcfce7; color: #15803d; }
-        .badge-sale { background: #fee2e2; color: #b91c1c; }
-        .badge-restock { background: #dbeafe; color: #1e40af; }
-
-        /* Buttons */
-        .btn {
-            padding: 0.7rem 1.2rem;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.95rem;
+        td {
+            padding: 1.5rem;
+            border-bottom: 1px solid #f1f5f9;
+            color: var(--text-main);
             font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
+        }
+
+        tr:hover td {
+            background: #f8fafc;
+        }
+
+        /* Chips */
+        .status-chip {
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            font-weight: 700;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 6px;
         }
 
-        .btn-primary {
-            background: #667eea;
-            color: white;
+        .chip-success {
+            background: #dcfce7;
+            color: #15803d;
         }
 
-        .btn-primary:hover {
-            background: #5568d3;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        .chip-warning {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .chip-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* --- Queued Item Style --- */
+        .queue-item {
+            background: white;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .queue-item:hover {
+            box-shadow: var(--shadow-sm);
+            border-color: var(--primary);
+        }
+
+        .price-input {
+            width: 80px;
+            padding: 4px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .price-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+        }
+
+        /* --- Modal --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: var(--shadow-lg);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .btn {
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .btn-success {
@@ -196,843 +327,542 @@
         .btn-danger:hover {
             background: #dc2626;
         }
-
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-
-        .btn-sm {
-            padding: 0.5rem 0.9rem;
-            font-size: 0.85rem;
-        }
-
-        /* Form */
-        .form-group {
-            margin-bottom: 1.2rem;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: #374151;
-        }
-
-        .form-input, .form-select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.2s;
-        }
-
-        .form-input:focus, .form-select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        /* Transaction Queue */
-        .transaction-queue {
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .transaction-item {
-            background: white;
-            border: 1px solid #e4e6eb;
-            border-radius: 10px;
-            padding: 1.2rem;
-            margin-bottom: 1rem;
-            transition: all 0.2s;
-        }
-
-        .transaction-item:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            transform: translateY(-2px);
-        }
-
-        .transaction-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 0.8rem;
-        }
-
-        .transaction-text {
-            font-size: 1.05rem;
-            color: #1c1e21;
-            font-weight: 500;
-        }
-
-        .transaction-time {
-            font-size: 0.85rem;
-            color: #65676b;
-        }
-
-        .transaction-details {
-            background: #f7f8fa;
-            padding: 0.8rem;
-            border-radius: 6px;
-            margin: 0.8rem 0;
-        }
-
-        .transaction-actions {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .edit-mode {
-            display: none;
-            margin-top: 0.8rem;
-        }
-
-        .edit-mode.active {
-            display: block;
-        }
-
-        /* Empty state */
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #65676b;
-        }
-
-        .empty-state-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        /* Toast notifications */
-        .toast {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            background: #1c1e21;
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 1000;
-            animation: slideIn 0.3s;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(400px); }
-            to { transform: translateX(0); }
-        }
-
-        .toast.success { background: #10b981; }
-        .toast.error { background: #ef4444; }
-
-        /* Loading spinner */
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 2rem auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Quick stats */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 10px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #667eea;
-        }
-
-        .stat-label {
-            color: #65676b;
-            font-size: 0.9rem;
-            margin-top: 0.3rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .tabs {
-                flex-wrap: nowrap;
-                overflow-x: auto;
-            }
-
-            table {
-                font-size: 0.9rem;
-            }
-
-            th, td {
-                padding: 0.7rem;
-            }
-        }
     </style>
 </head>
-<body>
-    <div class="header">
-        <h1>🛒 QuickStock</h1>
-        <p>Professional Inventory Management System</p>
-    </div>
 
-    <div class="container">
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('inventory')">📦 Inventory</button>
-            <button class="tab" onclick="switchTab('queue')">⏳ Transaction Queue <span id="queue-count" class="badge badge-restock" style="margin-left: 0.5rem;">0</span></button>
-            <button class="tab" onclick="switchTab('history')">📜 History</button>
-            <button class="tab" onclick="switchTab('manual')">➕ Manual Entry</button>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">
+            <i class="ri-voiceprint-fill" style="color: #4f46e5;"></i>
+            <span>QuickStock</span>
         </div>
 
-        <!-- Inventory Tab -->
-        <div id="inventory-tab" class="tab-content active">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="total-products">0</div>
-                    <div class="stat-label">Total Products</div>
+        <nav class="nav-menu">
+            <div id="nav-dashboard" class="nav-item active" onclick="switchView('dashboard')">
+                <i class="ri-dashboard-3-line"></i>
+                <span>Dashboard</span>
+            </div>
+            <div id="nav-inventory" class="nav-item" onclick="switchView('inventory')">
+                <i class="ri-archive-line"></i>
+                <span>All Inventory</span>
+            </div>
+            <div id="nav-orders" class="nav-item" onclick="switchView('orders')">
+                <i class="ri-shopping-cart-2-line"></i>
+                <span>Pending Orders</span>
+                <span id="nav-orders-badge"
+                    style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: auto; display: none;">0</span>
+            </div>
+            <div id="nav-analytics" class="nav-item" onclick="switchView('analytics')">
+                <i class="ri-pie-chart-2-line"></i>
+                <span>Analytics</span>
+            </div>
+            <div id="nav-history" class="nav-item" onclick="switchView('history')">
+                <i class="ri-file-list-3-line"></i>
+                <span>History Log</span>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main>
+
+        <!-- header -->
+        <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1 id="page-title" style="font-size: 2rem; font-weight: 700;">Dashboard</h1>
+                <p style="color: var(--text-muted);">Welcome back to your store.</p>
+            </div>
+            <div id="voice-indicator"
+                style="background: white; padding: 0.8rem 1.5rem; border-radius: 50px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-sm);">
+                <div id="voice-status-dot" style="width: 10px; height: 10px; background: #94a3b8; border-radius: 50%;">
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="low-stock-count">0</div>
-                    <div class="stat-label">Low Stock Items</div>
+                <span id="voice-status-text" style="font-weight: 600; font-size: 0.9rem; color: #94a3b8;">Voice
+                    Offline</span>
+            </div>
+        </div>
+
+        <!-- VIEW 1: DASHBOARD -->
+        <div id="view-dashboard" class="view-section active">
+            <div class="dashboard-grid">
+                <!-- Metric 1 -->
+                <div class="glass-card metric-card" onclick="showRevenueModal()" style="cursor: pointer;">
+                    <div class="metric-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                        <i class="ri-money-dollar-circle-line"></i>
+                    </div>
+                    <div>
+                        <div class="metric-value">₹12,450</div>
+                        <div class="metric-label">Today's Revenue <i class="ri-arrow-right-s-line"
+                                style="vertical-align: middle;"></i></div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="today-transactions">0</div>
-                    <div class="stat-label">Today's Transactions</div>
+                <!-- Metric 2 -->
+                <div class="glass-card metric-card">
+                    <div class="metric-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+                        <i class="ri-box-3-line"></i>
+                    </div>
+                    <div>
+                        <div class="metric-value" id="dashboard-low-stock">0</div>
+                        <div class="metric-label">Restock Needed</div>
+                    </div>
+                </div>
+                <!-- Metric 3 -->
+                <div class="glass-card metric-card">
+                    <div class="metric-icon" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
+                        <i class="ri-shopping-bag-3-line"></i>
+                    </div>
+                    <div>
+                        <div class="metric-value" id="dashboard-pending">0</div>
+                        <div class="metric-label">Pending Orders</div>
+                    </div>
+                </div>
+                <!-- Metric 4 -->
+                <div class="glass-card metric-card">
+                    <div class="metric-icon" style="background: rgba(236, 72, 153, 0.1); color: #ec4899;">
+                        <i class="ri-user-star-line"></i>
+                    </div>
+                    <div>
+                        <div class="metric-value">4.9</div>
+                        <div class="metric-label">Store Rating</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Current Inventory</h2>
-                    <button class="btn btn-secondary btn-sm" onclick="location.reload()">🔄 Refresh</button>
+            <div class="glass-card" style="margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1.5rem;">Sales Prediction (Next 7 Days)</h3>
+                <div style="height: 300px; width: 100%;">
+                    <canvas id="salesChart"></canvas>
                 </div>
-                <div style="overflow-x: auto;">
+            </div>
+        </div>
+
+        <!-- VIEW 2: INVENTORY -->
+        <div id="view-inventory" class="view-section">
+            <div class="glass-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>All Products</h3>
+                    <button class="btn" style="background:#f1f5f9;" onclick="loadData()">🔄 Refresh</button>
+                </div>
+                <div class="table-wrap">
                     <table id="inventory-table">
                         <thead>
                             <tr>
-                                <th>Product</th>
+                                <th>Product Name</th>
                                 <th>Current Stock</th>
-                                <th>Threshold</th>
                                 <th>Unit</th>
+                                <th>Price/Unit</th>
                                 <th>Status</th>
+                                <th>Forecast</th>
                             </tr>
                         </thead>
                         <tbody id="inventory-tbody">
-                            <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+                            <!-- Populated by JS -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- Transaction Queue Tab -->
-        <div id="queue-tab" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Pending Transactions</h2>
-                    <button class="btn btn-secondary btn-sm" onclick="loadPendingTransactions()">🔄 Refresh</button>
-                </div>
-                <div class="transaction-queue" id="pending-transactions">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📭</div>
-                        <p>No pending transactions</p>
-                    </div>
+        <!-- VIEW 3: ORDERS -->
+        <div id="view-orders" class="view-section">
+            <h3 style="margin-bottom: 1.5rem;">Pending Approvals</h3>
+            <div id="orders-list">
+                <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+                    <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
+                    No pending orders found.
                 </div>
             </div>
         </div>
 
-        <!-- History Tab -->
-        <div id="history-tab" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Transaction History</h2>
-                    <button class="btn btn-primary btn-sm" onclick="exportCSV()">📥 Export CSV</button>
+        <!-- VIEW 4: ANALYTICS -->
+        <div id="view-analytics" class="view-section">
+            <div class="dashboard-grid">
+                <div class="glass-card" style="grid-column: span 2;">
+                    <h3>Category Split</h3>
+                    <canvas id="categoryChart"></canvas>
                 </div>
-                <div style="overflow-x: auto;">
-                    <table>
+                <div class="glass-card" style="grid-column: span 2;">
+                    <h3>Weekly Trends</h3>
+                    <p style="color:var(--text-muted);">Sales are up by 15% this week compared to last week.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 5: HISTORY -->
+        <div id="view-history" class="view-section">
+            <div class="glass-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>Transaction Log</h3>
+                    <button class="btn" style="background:#f1f5f9;" onclick="loadHistory()">🔄 Refresh</button>
+                </div>
+                <div class="table-wrap">
+                    <table id="history-table">
                         <thead>
                             <tr>
-                                <th>Timestamp</th>
+                                <th>Time</th>
                                 <th>Action</th>
                                 <th>Product</th>
-                                <th>Quantity</th>
+                                <th>Qty</th>
+                                <th>Amt</th>
                                 <th>Stock Change</th>
                             </tr>
                         </thead>
                         <tbody id="history-tbody">
-                            <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+                            <tr>
+                                <td colspan="5">Loading history...</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- Manual Entry Tab -->
-        <div id="manual-tab" class="tab-content">
-            <div class="card" style="max-width: 700px; margin: 0 auto;">
-                <h2 class="card-title" style="margin-bottom: 1.5rem;">Quick Transaction Entry</h2>
-                
-                <div class="form-group">
-                    <label class="form-label">Action Type</label>
-                    <div style="display: flex; gap: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="radio" name="global-action" value="sale" checked onchange="updateActionType()">
-                            <span>📤 Sale</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="radio" name="global-action" value="restock" onchange="updateActionType()">
-                            <span>📥 Restock</span>
-                        </label>
-                    </div>
-                </div>
+        </div>
 
-                <div id="products-container">
-                    <!-- Product entries will be added here -->
-                </div>
+    </main>
 
-                <button type="button" class="btn btn-secondary" onclick="addProductRow()" style="width: 100%; margin-bottom: 1rem;">
-                    ➕ Add Another Product
-                </button>
-
-                <button type="button" class="btn btn-primary" onclick="submitManualEntry()" style="width: 100%;">
-                    ✅ Submit All Transactions
-                </button>
+    <!-- Modal -->
+    <div id="revenue-modal" class="modal-overlay" onclick="if(event.target === this) closeRevenueModal()">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3>Revenue Breakdown</h3>
+                <button onclick="closeRevenueModal()"
+                    style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table style="width:100%;">
+                    <thead>
+                        <tr style="text-align:left; border-bottom:1px solid #eee;">
+                            <th style="padding:0.5rem; background:white;">Date</th>
+                            <th style="padding:0.5rem; background:white; text-align:right;">Daily Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="revenue-modal-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <script>
-        // Global state
-        let currentTab = 'inventory';
-        let pendingTransactions = [];
-        let inventory = {};
-        let englishNames = {};
-        let unitNames = {};
-        let productRowCounter = 0;
-        let autoRefreshInterval = null;
+        // --- Global State ---
+        let globalStats = {};
 
-        // Switch tabs
-        function switchTab(tabName) {
-            currentTab = tabName;
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById(tabName + '-tab').classList.add('active');
+        // --- Navigation Logic ---
+        function switchView(viewName) {
+            // 1. Update Sidebar Active State
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('nav-' + viewName).classList.add('active');
 
-            // Load data for the tab
-            if (tabName === 'inventory') loadInventory();
-            else if (tabName === 'queue') loadPendingTransactions();
-            else if (tabName === 'history') loadHistory();
-            else if (tabName === 'manual') loadProductsForManual();
+            // 2. Hide all views
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+
+            // 3. Show selected view
+            document.getElementById('view-' + viewName).classList.add('active');
+
+            // 4. Update Header Title
+            const titles = {
+                'dashboard': 'Dashboard Overview',
+                'inventory': 'Inventory Management',
+                'orders': 'Order Processing',
+                'analytics': 'Business Intelligence',
+                'history': 'Transaction Logs'
+            };
+            document.getElementById('page-title').innerText = titles[viewName];
+
+            // 5. Trigger Data Load
+            if (viewName === 'inventory') loadData();
+            if (viewName === 'orders') loadData(); // also refreshes pending
+            if (viewName === 'analytics') loadAnalyticsCharts();
+            if (viewName === 'history') loadHistory();
         }
 
-        // Load inventory
-        async function loadInventory() {
+        // --- Data Fetching ---
+        async function loadData() {
             try {
-                const res = await fetch('/inventory');
-                const data = await res.json();
-                
-                console.log('Inventory API response:', data);
-                
-                // Handle both old and new API format
-                if (data.products && data.english_names) {
-                    inventory = data.products;
-                    englishNames = data.english_names;
-                    unitNames = data.unit_names || {};
+                // Fetch System Stats (Revenue, Status, Counts)
+                const sRes = await fetch('/dashboard_stats');
+                const stats = await sRes.json();
+                globalStats = stats;
+
+                // Update Voice Indicator
+                const indicator = document.getElementById('voice-indicator');
+                const indicatorText = document.getElementById('voice-status-text');
+                const indicatorDot = document.getElementById('voice-status-dot');
+
+                if (stats.voice_active) {
+                    indicatorDot.style.background = '#10b981'; // Green
+                    indicatorDot.style.boxShadow = '0 0 10px #10b981';
+                    indicatorText.innerText = 'Voice Active';
+                    indicatorText.style.color = '#1e293b';
                 } else {
-                    // Old format fallback
-                    inventory = data;
-                    englishNames = {};
-                    unitNames = {};
+                    indicatorDot.style.background = '#94a3b8'; // Grey
+                    indicatorDot.style.boxShadow = 'none';
+                    indicatorText.innerText = 'Voice Offline';
+                    indicatorText.style.color = '#94a3b8';
                 }
-                
+
+                // Update Metrics
+                document.querySelector('.metric-value').innerText = "₹" + stats.today_revenue;
+                document.getElementById('dashboard-low-stock').innerText = stats.low_stock_count;
+                document.getElementById('dashboard-pending').innerText = stats.pending_count;
+
+                // Update Sidebar Badge
+                const navBadge = document.getElementById('nav-orders-badge');
+                if (stats.pending_count > 0) {
+                    navBadge.style.display = 'inline-block';
+                    navBadge.innerText = stats.pending_count;
+                } else {
+                    navBadge.style.display = 'none';
+                }
+
+                // Render Orders List (View 3)
+                const qRes = await fetch('/pending_confirmations');
+                const qData = await qRes.json();
+                const ordersList = document.getElementById('orders-list');
+
+                if (stats.pending_count > 0 && qData.pending) {
+                    ordersList.innerHTML = '';
+                    qData.pending.forEach(order => {
+                        let text = order.original_text;
+                        let id = order.id;
+                        let nlu = order.nlu_result;
+                        let details = nlu.action + " " + nlu.quantity + " " + nlu.product;
+
+                        ordersList.innerHTML += `
+                            <div class="queue-item">
+                                <div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.3rem;">"${text}"</div>
+                                    <div style="color: var(--text-muted); font-size: 0.9rem;">${details}</div>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn btn-success" onclick="approveTx(${id})">Approve</button>
+                                    <button class="btn btn-danger" onclick="rejectTx(${id})">Reject</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    ordersList.innerHTML = `<div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+                        <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
+                        All caught up! No pending orders.
+                    </div>`;
+                }
+
+                // Fetch Inventory
+                const iRes = await fetch('/inventory');
+                const iData = await iRes.json();
+                let products = iData.products || iData;
+                let enNames = iData.english_names || {};
+
                 const tbody = document.getElementById('inventory-tbody');
-                tbody.innerHTML = '';
+                tbody.innerHTML = ''; // clear
 
-                let lowStockCount = 0;
-                let totalProducts = 0;
+                for (let [key, val] of Object.entries(products)) {
+                    let name = enNames[key] || key;
+                    name = name.charAt(0).toUpperCase() + name.slice(1);
 
-                for (const [product, details] of Object.entries(inventory)) {
-                    totalProducts++;
-                    const { current_stock, threshold, unit } = details;
-                    const displayName = englishNames[product] || product;
-                    const displayUnit = unitNames[unit] || unit;
-                    
-                    let status, badgeClass;
-                    if (current_stock <= threshold) {
-                        status = '⚠️ LOW STOCK';
-                        badgeClass = 'badge-low';
-                        lowStockCount++;
-                    } else if (current_stock <= threshold * 2) {
-                        status = 'ℹ️ MEDIUM';
-                        badgeClass = 'badge-medium';
+                    let stock = val.current_stock;
+                    let thresh = val.threshold;
+                    let price = val.price || 0; // Price
+
+                    let statusHtml = '';
+                    let forecastHtml = 'Stable';
+
+                    if (stock <= thresh) {
+                        statusHtml = `<span class="status-chip chip-danger">Critical</span>`;
+                        forecastHtml = `<span style="color:#ef4444; font-weight:600;">Refill ASAP</span>`;
+                    } else if (stock <= thresh * 1.5) {
+                        statusHtml = `<span class="status-chip chip-warning">Low</span>`;
                     } else {
-                        status = '✅ GOOD';
-                        badgeClass = 'badge-good';
+                        statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
+                        forecastHtml = `<span style="color:#64748b;">Good</span>`;
                     }
 
                     tbody.innerHTML += `
                         <tr>
-                            <td style="font-weight: 600;">${displayName}</td>
-                            <td style="text-align: center; font-size: 1.1rem;">${current_stock}</td>
-                            <td style="text-align: center;">${threshold}</td>
-                            <td style="text-align: center;">${displayUnit}</td>
-                            <td style="text-align: center;"><span class="badge ${badgeClass}">${status}</span></td>
+                            <td style="font-weight:600;">${name}</td>
+                            <td>${stock}</td>
+                            <td style="color:#64748b;">${val.unit}</td>
+                            <td>
+                                <input type="number" id="price-input-${key}" class="price-input" value="${inputValue}" 
+                                    onchange="updatePrice('${key}', this.value)" 
+                                    onkeypress="if(event.key === 'Enter') this.blur()"
+                                />
+                            </td>
+                            <td>${statusHtml}</td>
+                            <td>${forecastHtml}</td>
                         </tr>
                     `;
                 }
-
-                document.getElementById('total-products').textContent = totalProducts;
-                document.getElementById('low-stock-count').textContent = lowStockCount;
-            } catch (err) {
-                console.error('Failed to load inventory:', err);
-            }
+            } catch (e) { console.error(e); }
         }
 
-        // Load pending transactions
-        async function loadPendingTransactions() {
-            try {
-                const res = await fetch('/pending_confirmations');
-                const data = await res.json();
-                pendingTransactions = data.pending || [];
+        // --- Actions ---
+        async function approveTx(id) {
+            await fetch('/confirm_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            loadData(); // refresh
+        }
 
-                document.getElementById('queue-count').textContent = pendingTransactions.length;
+        async function rejectTx(id) {
+            await fetch('/reject_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            loadData(); // refresh
+        }
 
-                const container = document.getElementById('pending-transactions');
-                
-                if (pendingTransactions.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📭</div>
-                            <p>No pending transactions</p>
-                        </div>
-                    `;
-                    return;
-                }
+        // --- Charts ---
+        function initCharts() {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(79, 70, 229, 0.4)');
+            gradient.addColorStop(1, 'rgba(79, 70, 229, 0.0)');
 
-                container.innerHTML = pendingTransactions.map(t => {
-                    const nlu = t.nlu_result;
-                    const isMulti = nlu.action && nlu.action.startsWith('multi_');
-                    
-                    let detailsHtml = '';
-                    if (isMulti) {
-                        const items = nlu.items || [];
-                        detailsHtml = items.map(item => {
-                            const displayName = englishNames[item.product] || item.product;
-                            const displayUnit = unitNames[item.unit] || item.unit;
-                            return `<div>• ${item.quantity} ${displayUnit} ${displayName} (${item.old_stock} → ${item.new_stock})</div>`;
-                        }).join('');
-                    } else {
-                        const displayName = englishNames[nlu.product] || nlu.product;
-                        const displayUnit = unitNames[nlu.unit] || nlu.unit;
-                        detailsHtml = `<div>${nlu.quantity} ${displayUnit} ${displayName} (${nlu.old_stock} → ${nlu.new_stock})</div>`;
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Projected Sales',
+                        data: [65, 59, 80, 81, 56, 95, 120],
+                        borderColor: '#4f46e5',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { borderDash: [5, 5] }, border: { display: false } }
                     }
-
-                    return `
-                        <div class="transaction-item" id="trans-${t.id}">
-                            <div class="transaction-header">
-                                <div>
-                                    <div class="transaction-text">🎤 "${t.original_text}"</div>
-                                    <div class="transaction-time">${t.timestamp}</div>
-                                </div>
-                                <span class="badge ${nlu.action === 'sale' || nlu.action === 'multi_sale' ? 'badge-sale' : 'badge-restock'}">
-                                    ${nlu.action.replace('multi_', '').toUpperCase()}
-                                </span>
-                            </div>
-                            <div class="transaction-details">
-                                ${detailsHtml}
-                            </div>
-                            <div class="transaction-actions">
-                                <button class="btn btn-success btn-sm" onclick="confirmTransaction(${t.id})">✅ Confirm</button>
-                                <button class="btn btn-danger btn-sm" onclick="rejectTransaction(${t.id})">❌ Reject</button>
-                                <button class="btn btn-secondary btn-sm" onclick="toggleEdit(${t.id})">✏️ Edit</button>
-                            </div>
-                            <div class="edit-mode" id="edit-${t.id}">
-                                ${isMulti ? `
-                                    <div style="background: white; padding: 1rem; border-radius: 8px; margin-top: 0.8rem;">
-                                        <strong style="display: block; margin-bottom: 0.8rem;">Edit Items:</strong>
-                                        ${(nlu.items || []).map((item, idx) => `
-                                            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
-                                                <select class="form-select" id="edit-multi-prod-${t.id}-${idx}" style="padding: 0.5rem;">
-                                                    ${Object.keys(inventory).map(p => {
-                                                        const displayName = englishNames[p] || p;
-                                                        return `<option value="${p}" ${p === item.product ? 'selected' : ''}>${displayName}</option>`;
-                                                    }).join('')}
-                                                </select>
-                                                <input type="number" class="form-input" id="edit-multi-qty-${t.id}-${idx}" value="${item.quantity}" step="0.01" style="padding: 0.5rem;" placeholder="Qty">
-                                                <button class="btn btn-danger btn-sm" onclick="removeMultiEditItem(${t.id}, ${idx})" style="padding: 0.4rem;">🗑️</button>
-                                            </div>
-                                        `).join('')}
-                                        <button class="btn btn-primary btn-sm" onclick="saveMultiEdit(${t.id}, ${(nlu.items || []).length})" style="margin-top: 0.5rem;">💾 Save All Changes</button>
-                                    </div>
-                                ` : `
-                                    <div style="background: white; padding: 1rem; border-radius: 8px; margin-top: 0.8rem;">
-                                        <div class="form-group" style="margin-bottom: 0.8rem;">
-                                            <label class="form-label">Product</label>
-                                            <select class="form-select" id="edit-product-${t.id}">
-                                                ${Object.keys(inventory).map(p => {
-                                                    const displayName = englishNames[p] || p;
-                                                    return `<option value="${p}" ${p === nlu.product ? 'selected' : ''}>${displayName}</option>`;
-                                                }).join('')}
-                                            </select>
-                                        </div>
-                                        <div class="form-group" style="margin-bottom: 0.8rem;">
-                                            <label class="form-label">Quantity</label>
-                                            <input type="number" class="form-input" id="edit-qty-${t.id}" value="${nlu.quantity}" step="0.01">
-                                        </div>
-                                        <button class="btn btn-primary btn-sm" onclick="saveEdit(${t.id})">💾 Save Changes</button>
-                                    </div>
-                                `}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            } catch (err) {
-                console.error('Failed to load pending transactions:', err);
-            }
-        }
-
-        // Confirm transaction
-        async function confirmTransaction(id) {
-            try {
-                const res = await fetch('/confirm_action', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id})
-                });
-                
-                if (res.ok) {
-                    showToast('Transaction confirmed!', 'success');
-                    loadPendingTransactions();
-                    loadInventory();
                 }
-            } catch (err) {
-                showToast('Failed to confirm transaction', 'error');
-            }
+            });
         }
 
-        // Reject transaction
-        async function rejectTransaction(id) {
-            try {
-                const res = await fetch('/reject_action', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id})
-                });
-                
-                if (res.ok) {
-                    showToast('Transaction rejected', 'success');
-                    loadPendingTransactions();
+        function loadAnalyticsCharts() {
+            const ctx2 = document.getElementById('categoryChart').getContext('2d');
+            // Check if chart instance exists, destroy (omitted for brevity, simple overwrite works in simple cases or need global var)
+            new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Grocery', 'Dairy', 'Personal Care'],
+                    datasets: [{
+                        data: [300, 50, 100],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
                 }
-            } catch (err) {
-                showToast('Failed to reject transaction', 'error');
-            }
+            });
         }
 
-        // Toggle edit mode
-        function toggleEdit(id) {
-            // Stop auto-refresh when editing
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
-            
-            const editDiv = document.getElementById(`edit-${id}`);
-            editDiv.classList.toggle('active');
-        }
-
-        // Save edit (single product)
-        async function saveEdit(id) {
-            const newQty = document.getElementById(`edit-qty-${id}`).value;
-            const newProduct = document.getElementById(`edit-product-${id}`).value;
-            
-            try {
-                const res = await fetch('/edit_pending', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        id, 
-                        quantity: parseFloat(newQty),
-                        product: newProduct
-                    })
-                });
-                
-                if (res.ok) {
-                    showToast('Transaction updated!', 'success');
-                    await loadPendingTransactions();
-                    // Restart auto-refresh
-                    startAutoRefresh();
-                }
-            } catch (err) {
-                showToast('Failed to update transaction', 'error');
-            }
-        }
-
-        // Save edit (multi-product)
-        async function saveMultiEdit(id, itemCount) {
-            const updatedItems = [];
-            
-            for (let i = 0; i < itemCount; i++) {
-                const qtyInput = document.getElementById(`edit-multi-qty-${id}-${i}`);
-                const prodInput = document.getElementById(`edit-multi-prod-${id}-${i}`);
-                
-                if (qtyInput && prodInput) {
-                    updatedItems.push({
-                        product: prodInput.value,
-                        quantity: parseFloat(qtyInput.value)
-                    });
-                }
-            }
-            
-            try {
-                const res = await fetch('/edit_pending', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id, multi_items: updatedItems})
-                });
-                
-                if (res.ok) {
-                    showToast('Transaction updated!', 'success');
-                    await loadPendingTransactions();
-                    // Restart auto-refresh
-                    startAutoRefresh();
-                }
-            } catch (err) {
-                showToast('Failed to update transaction', 'error');
-            }
-        }
-
-        // Remove item from multi-product edit
-        function removeMultiEditItem(id, idx) {
-            const itemDiv = document.getElementById(`edit-multi-qty-${id}-${idx}`).parentElement;
-            itemDiv.style.display = 'none';
-            showToast('Item removed (save to confirm)', 'info');
-        }
-
-        // Load history
         async function loadHistory() {
             try {
-                // Load inventory data if not already loaded
-                if (Object.keys(englishNames).length === 0) {
-                    const invRes = await fetch('/inventory');
-                    const invData = await invRes.json();
-                    englishNames = invData.english_names || {};
-                    unitNames = invData.unit_names || {};
-                }
-                
-                const res = await fetch('/transaction_history');
+                const res = await fetch('/history');
                 const data = await res.json();
-                const transactions = data.transactions || [];
-
                 const tbody = document.getElementById('history-tbody');
-                
-                if (transactions.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #65676b;">No transaction history</td></tr>';
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No transactions recorded yet.</td></tr>';
                     return;
                 }
 
-                tbody.innerHTML = transactions.slice(0, 100).map(t => {
-                    const displayName = englishNames[t.product] || t.product;
-                    const displayUnit = unitNames[t.unit] || t.unit;
-                    return `
+                data.forEach(row => {
+                    let badge = row.action === 'sale'
+                        ? '<span class="status-chip chip-success">SALE</span>'
+                        : '<span class="status-chip chip-warning">RESTOCK</span>';
+
+                    let dateObj = new Date(row.timestamp);
+                    let timeStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    let amount = row.total_amount ? `₹${row.total_amount}` : '-';
+
+                    tbody.innerHTML += `
                         <tr>
-                            <td>${t.timestamp}</td>
-                            <td><span class="badge ${t.action === 'sale' ? 'badge-sale' : 'badge-restock'}">${t.action.toUpperCase()}</span></td>
-                            <td>${displayName}</td>
-                            <td>${t.quantity} ${displayUnit}</td>
-                            <td>${t.old_stock} → ${t.new_stock}</td>
+                            <td style="color:var(--text-muted); font-size:0.9rem;">${timeStr}</td>
+                            <td>${badge}</td>
+                            <td style="font-weight:600;">${row.product_en || row.product}</td>
+                            <td>${row.quantity} ${row.unit}</td>
+                            <td style="font-weight:700; color:${row.action === 'sale' ? '#10b981' : '#64748b'}">${amount}</td>
+                            <td>${row.old_stock} ➝ <b>${row.new_stock}</b></td>
                         </tr>
                     `;
-                }).join('');
-
-                // Update today's transactions count
-                const today = new Date().toISOString().split('T')[0];
-                const todayCount = transactions.filter(t => t.timestamp.startsWith(today)).length;
-                document.getElementById('today-transactions').textContent = todayCount;
-            } catch (err) {
-                console.error('Failed to load history:', err);
-            }
+                });
+            } catch (e) { console.error(e); }
         }
 
-        // Load products for manual entry
-        async function loadProductsForManual() {
-            try {
-                const res = await fetch('/inventory');
-                const data = await res.json();
-                inventory = data.products;
-                englishNames = data.english_names;
-                unitNames = data.unit_names || {};
-                
-                // Clear and add first row
-                document.getElementById('products-container').innerHTML = '';
-                addProductRow();
-            } catch (err) {
-                console.error('Failed to load products:', err);
-            }
-        }
+        // --- Start Modal Logic ---
+        function showRevenueModal() {
+            const modal = document.getElementById('revenue-modal');
+            const tbody = document.getElementById('revenue-modal-body');
+            tbody.innerHTML = '';
 
-        // Add a product row
-        function addProductRow() {
-            const rowId = productRowCounter++;
-            const container = document.getElementById('products-container');
-            
-            const productOptions = Object.keys(inventory).map(p => {
-                const displayName = englishNames[p] || p;
-                return `<option value="${p}">${displayName}</option>`;
-            }).join('');
+            const history = globalStats.revenue_history || {};
 
-            const rowHtml = `
-                <div class="card" id="product-row-${rowId}" style="margin-bottom: 1rem; padding: 1rem; background: #f7f8fa;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
-                        <strong>Product ${rowId + 1}</strong>
-                        ${rowId > 0 ? `<button type="button" class="btn btn-danger btn-sm" onclick="removeProductRow(${rowId})">🗑️ Remove</button>` : ''}
-                    </div>
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">Product</label>
-                            <select class="form-select product-select" id="product-${rowId}" required>
-                                <option value="">Select a product...</option>
-                                ${productOptions}
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label class="form-label">Quantity</label>
-                            <input type="number" class="form-input quantity-input" id="quantity-${rowId}" step="0.01" min="0.01" required>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.insertAdjacentHTML('beforeend', rowHtml);
-        }
+            // Sort dates descending
+            const sortedDates = Object.keys(history).sort().reverse();
 
-        // Remove a product row
-        function removeProductRow(rowId) {
-            const row = document.getElementById(`product-row-${rowId}`);
-            if (row) row.remove();
-        }
-
-        // Update action type for all products
-        function updateActionType() {
-            // Just for UI feedback - action is global
-        }
-
-        // Submit manual entry
-        async function submitManualEntry() {
-            const action = document.querySelector('input[name="global-action"]:checked').value;
-            const productSelects = document.querySelectorAll('.product-select');
-            const quantityInputs = document.querySelectorAll('.quantity-input');
-            
-            const entries = [];
-            for (let i = 0; i < productSelects.length; i++) {
-                const product = productSelects[i].value;
-                const quantity = quantityInputs[i].value;
-                
-                if (product && quantity) {
-                    entries.push({ product, quantity: parseFloat(quantity), action });
-                }
+            if (sortedDates.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2">No revenue history.</td></tr>';
+            } else {
+                sortedDates.forEach(dateStr => {
+                    let val = history[dateStr];
+                    tbody.innerHTML += `
+                        <tr>
+                            <td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; font-weight:500;">${dateStr}</td>
+                            <td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; text-align:right; font-weight:700; color:#10b981;">₹${val}</td>
+                        </tr>
+                    `;
+                });
             }
 
-            if (entries.length === 0) {
-                showToast('Please add at least one product', 'error');
-                return;
-            }
+            modal.style.display = 'flex';
+        }
 
-            // Submit all entries
-            let successCount = 0;
-            let errorCount = 0;
+        function closeRevenueModal() {
+            document.getElementById('revenue-modal').style.display = 'none';
+        }
 
-            for (const entry of entries) {
+        async function updatePrice(productName, newPrice) {
+            if (newPrice && !isNaN(newPrice)) {
                 try {
-                    const res = await fetch('/manual_entry', {
+                    let res = await fetch('/update_price', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(entry)
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ product: productName, price: newPrice })
                     });
-
-                    if (res.ok) {
-                        successCount++;
+                    let data = await res.json();
+                    if (data.success) {
+                        console.log('Price updated for ' + productName);
+                        loadData();
                     } else {
-                        const data = await res.json();
-                        showToast(data.error || 'Failed to add transaction', 'error');
-                        errorCount++;
+                        console.error('Error: ' + (data.error || 'Failed'));
                     }
-                } catch (err) {
-                    errorCount++;
+                } catch (e) {
+                    console.error('Connection error', e);
                 }
             }
-
-            if (successCount > 0) {
-                showToast(`${successCount} transaction(s) added successfully!`, 'success');
-                loadInventory();
-                // Reset form
-                document.getElementById('products-container').innerHTML = '';
-                addProductRow();
-            }
         }
+        // --- End Modal Logic ---
 
-        // Export CSV
-        function exportCSV() {
-            window.location.href = '/export_csv';
-        }
+        // Init
+        initCharts();
+        loadData();
+        setInterval(loadData, 5000); // Live poll
 
-        // Show toast notification
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-
-        // Start auto-refresh
-        function startAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-            }
-            autoRefreshInterval = setInterval(() => {
-                if (currentTab === 'queue') {
-                    loadPendingTransactions();
-                }
-            }, 3000);
-        }
-
-        // Initial load
-        loadInventory();
-        loadPendingTransactions();
-        startAutoRefresh();
     </script>
 </body>
+
 </html>

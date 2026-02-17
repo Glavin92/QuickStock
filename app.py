@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, request, jsonify, send_file
 import os
 import re
@@ -7,7 +8,7 @@ import speech_recognition as sr
 import difflib
 from difflib import SequenceMatcher
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, date
 try:
     from indicnlp.normalize.indic_normalize import IndicNormalizerFactory
     _has_indicnlp_normalizer = True
@@ -73,6 +74,9 @@ transaction_log = []
 # Pending confirmations from voice input
 pending_confirmations = []
 
+# Global status of Android Client
+android_client_connected = False
+
 # Hindi to English product name mapping
 product_name_english = {
     "पारले जी": "Parle-G",
@@ -102,22 +106,23 @@ unit_name_english = {
 }
 
 # Enhanced database with measurement units and base units
+# Enhanced database with measurement units and base units
 products = {
-    "पारले जी": {"current_stock": 100, "threshold": 20, "unit": "पैकेट", "base_unit": "पैकेट"},
-    "लेस": {"current_stock": 50, "threshold": 15, "unit": "पैकेट", "base_unit": "पैकेट"},
-    "डाबर हनी": {"current_stock": 30, "threshold": 10, "unit": "बोतल", "base_unit": "बोतल"},
-    "टाटा नमक": {"current_stock": 80, "threshold": 25, "unit": "पैकेट", "base_unit": "पैकेट"},
-    "कोक": {"current_stock": 40, "threshold": 12, "unit": "बोतल", "base_unit": "बोतल"},
-    "साबुन": {"current_stock": 25, "threshold": 8, "unit": "पीस", "base_unit": "पीस"},
+    "पारले जी": {"current_stock": 100, "threshold": 20, "unit": "पैकेट", "base_unit": "पैकेट", "price": 10},
+    "लेस": {"current_stock": 50, "threshold": 15, "unit": "पैकेट", "base_unit": "पैकेट", "price": 20},
+    "डाबर हनी": {"current_stock": 30, "threshold": 10, "unit": "बोतल", "base_unit": "बोतल", "price": 150},
+    "टाटा नमक": {"current_stock": 80, "threshold": 25, "unit": "पैकेट", "base_unit": "पैकेट", "price": 25},
+    "कोक": {"current_stock": 40, "threshold": 12, "unit": "बोतल", "base_unit": "बोतल", "price": 40},
+    "साबुन": {"current_stock": 25, "threshold": 8, "unit": "पीस", "base_unit": "पीस", "price": 35},
 
-    "आटा": {"current_stock": 100, "threshold": 25, "unit": "किलो", "base_unit": "किलो"},
-    "चावल": {"current_stock": 150, "threshold": 30, "unit": "किलो", "base_unit": "किलो"},
-    "दाल": {"current_stock": 80, "threshold": 20, "unit": "किलो", "base_unit": "किलो"},
-    "चीनी": {"current_stock": 60, "threshold": 15, "unit": "किलो", "base_unit": "किलो"},
+    "आटा": {"current_stock": 100, "threshold": 25, "unit": "किलो", "base_unit": "किलो", "price": 45},
+    "चावल": {"current_stock": 150, "threshold": 30, "unit": "किलो", "base_unit": "किलो", "price": 60},
+    "दाल": {"current_stock": 80, "threshold": 20, "unit": "किलो", "base_unit": "किलो", "price": 120},
+    "चीनी": {"current_stock": 60, "threshold": 15, "unit": "किलो", "base_unit": "किलो", "price": 42},
 
-    "तेल": {"current_stock": 50, "threshold": 12, "unit": "लीटर", "base_unit": "लीटर"},
-    "दूध": {"current_stock": 40, "threshold": 10, "unit": "लीटर", "base_unit": "लीटर"},
-    "चाय": {"current_stock": 5, "threshold": 2, "unit": "किलो", "base_unit": "किलो"},
+    "तेल": {"current_stock": 50, "threshold": 12, "unit": "लीटर", "base_unit": "लीटर", "price": 180},
+    "दूध": {"current_stock": 40, "threshold": 10, "unit": "लीटर", "base_unit": "लीटर", "price": 66},
+    "चाय": {"current_stock": 5, "threshold": 2, "unit": "किलो", "base_unit": "किलो", "price": 450},
 }
 
 # Measurement unit conversions (to base units)
@@ -1028,13 +1033,8 @@ def process_text_command(text, apply=True):
     
     # If we have both quantity and product, determine action
     if quantity and product_key:
-        # Determine the appropriate unit for display
-        display_unit = unit if unit else products[product_key]['unit']
-        
         # Check for RESTOCK keywords
         restock_keywords = ['आ गया', 'आ गए', 'आया', 'जोड़', 'डाल', 'मिला']
-
-
         restock_found = any(keyword in text for keyword in restock_keywords)
         
         # Check for SALE keywords
@@ -1042,6 +1042,39 @@ def process_text_command(text, apply=True):
         sale_found = any(keyword in text for keyword in sale_keywords)
 
         print(f"Action detection - Restock: {restock_found}, Sale: {sale_found}")
+        
+        # 🆕 AUTO-CREATE: Only on RESTOCK, not on SALE
+        if product_key not in products:
+            if restock_found and not sale_found:
+                # This is a restock of a new product - create it
+                print(f"🆕 NEW PRODUCT DETECTED: '{product_key}' - Auto-creating...")
+                
+                # Determine unit (use detected unit or default to 'packet')
+                new_unit = unit if unit else 'packet'
+                
+                # Create new product with smart defaults
+                products[product_key] = {
+                    'current_stock': 0,  # Will be set by restock
+                    'threshold': max(1, int(quantity * 0.2)),  # 20% of first quantity
+                    'unit': new_unit,
+                    'base_unit': new_unit,
+                    'price': 0  # Shopkeeper can update later
+                }
+                
+                # Add to English name mapping (use same name for now)
+                product_name_english[product_key] = product_key.title()
+                
+                print(f"✅ Created: {product_key} | Unit: {new_unit} | Threshold: {products[product_key]['threshold']}")
+            else:
+                # This is a sale/unknown action for unknown product - ERROR
+                return {
+                    'action': 'error',
+                    'message': f"❌ Product '{product_key}' not found in inventory. Please add it first using restock."
+                }
+        
+        # Now product definitely exists, proceed with action
+        # Determine the appropriate unit for display
+        display_unit = unit if unit else products[product_key]['unit']
 
         # RESTOCK action
         if restock_found and not sale_found:
@@ -1049,6 +1082,12 @@ def process_text_command(text, apply=True):
             if apply:
                 old_stock = products[product_key]["current_stock"]
                 products[product_key]["current_stock"] = new_stock
+                
+                # 🧠 SMART THRESHOLD: Update to 20% of new stock
+                new_threshold = max(1, int(new_stock * 0.2))
+                products[product_key]["threshold"] = new_threshold
+                print(f"🧠 Smart Threshold Updated: {product_key} → {new_threshold} (20% of {new_stock})")
+                
                 # Log transaction
                 trans = {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -1057,8 +1096,13 @@ def process_text_command(text, apply=True):
                     'quantity': quantity,
                     'unit': display_unit,
                     'old_stock': old_stock,
-                    'new_stock': new_stock
+                    'new_stock': new_stock,
+                    'price': products[product_key].get('price', 0),
+                    'total_amount': -(quantity * products[product_key].get('price', 0)) # Restock costs money? Or just tracking item value? Let's keep it positive for inventory value, or handle logic. Usually restock is expense. But here just logging. Let's log positive value.
                 }
+                # For restock, maybe we don't count it as revenue. 
+                trans['total_amount'] = 0 # No revenue from restock
+                
                 transaction_log.append(trans)
                 save_transaction_to_csv(trans)
                 print(f"RESTOCKED: {quantity} {display_unit} {product_key}. New stock: {products[product_key]['current_stock']} {products[product_key]['unit']}")
@@ -1088,7 +1132,9 @@ def process_text_command(text, apply=True):
                         'quantity': quantity,
                         'unit': display_unit,
                         'old_stock': old_stock,
-                        'new_stock': new_stock
+                        'new_stock': new_stock,
+                        'price': products[product_key].get('price', 0),
+                        'total_amount': quantity * products[product_key].get('price', 0)
                     }
                     transaction_log.append(trans)
                     save_transaction_to_csv(trans)
@@ -1321,8 +1367,8 @@ def save_transaction_to_csv(transaction):
     file_exists = os.path.exists(TRANSACTIONS_CSV)
     
     with open(TRANSACTIONS_CSV, 'a', newline='', encoding='utf-8') as f:
-        fieldnames = ['timestamp', 'action', 'product', 'quantity', 'unit', 'old_stock', 'new_stock']
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        fieldnames = ['timestamp', 'action', 'product', 'quantity', 'unit', 'old_stock', 'new_stock', 'price', 'total_amount']
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         
         if not file_exists:
             writer.writeheader()
@@ -1409,7 +1455,39 @@ def reject_action():
             pending_confirmations.pop(i)
             return jsonify({'success': True, 'message': 'Action rejected'})
     
+    
     return jsonify({'error': 'Action not found'}), 404
+
+@app.route('/update_price', methods=['POST'])
+def update_price():
+    """Update the price of a product."""
+    data = request.get_json()
+    product_name = data.get('product')
+    new_price = data.get('price')
+
+    if not product_name or new_price is None:
+        return jsonify({'error': 'Missing product or price'}), 400
+
+    # Try to find by key or value
+    target_key = None
+    if product_name in products:
+        target_key = product_name
+    else:
+        # Try finding by English name
+        for k, v in product_name_english.items():
+            if v.lower() == product_name.lower():
+                target_key = k
+                break
+    
+    if target_key:
+        try:
+            products[target_key]['price'] = float(new_price)
+            print(f"💰 Price Updated: {target_key} -> ₹{new_price}")
+            return jsonify({'success': True, 'new_price': products[target_key]['price']})
+        except ValueError:
+             return jsonify({'error': 'Invalid price format'}), 400
+    
+    return jsonify({'error': 'Product not found'}), 404
 
 @app.route('/edit_pending', methods=['POST'])
 def edit_pending():
@@ -1962,14 +2040,117 @@ def old_home():
     </html>
     """
 
-if __name__ == '__main__':
-    print("\n🎯 Voice Inventory Management System with Measurement Units")
-    print("📍 Now supports: kg, g, liters, ml, packets, bottles, pieces")
-    print("📍 Access: http://localhost:5000")
-    print("\n🌟 Try these measurement commands:")
-    print("   • http://localhost:5000/preprocess?text=2 kg aata beche")
-    print("   • http://localhost:5000/preprocess?text=5 liters milk aa gaya")
-    print("   • http://localhost:5000/preprocess?text=500 g sugar beche")
-    print("\nType Ctrl+C to stop the server\n")
+@app.route('/history', methods=['GET'])
+def get_history():
+    """Returns the transaction history from CSV."""
+    if not os.path.exists(TRANSACTIONS_CSV):
+        return jsonify([])
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    history_data = []
+    try:
+        with open(TRANSACTIONS_CSV, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Add English name if available
+                p_name = row.get('product', '')
+                if p_name in product_name_english:
+                    row['product_en'] = product_name_english[p_name]
+                else:
+                    # Try reverse lookup if needed or just use Hindi
+                    row['product_en'] = p_name
+                history_data.append(row)
+        
+        # Return newest first
+        return jsonify(list(reversed(history_data)))
+    except Exception as e:
+        print(f"Error reading history: {e}")
+        return jsonify([])
+
+@app.route('/set_client_status', methods=['POST'])
+def set_client_status():
+    global android_client_connected
+    data = request.json
+    if data and 'connected' in data:
+        android_client_connected = data['connected']
+        status = "CONNECTED" if android_client_connected else "DISCONNECTED"
+        print(f"📱 Android Client Status: {status}")
+        return jsonify({"status": "updated", "connected": android_client_connected})
+    return jsonify({"error": "Invalid data"}), 400
+
+@app.route('/dashboard_stats', methods=['GET'])
+def get_dashboard_stats():
+    """Returns aggregated stats: Revenue, Low Stock, Pending, Client Status, and Revenue History."""
+    
+    today_str = date.today().isoformat() # YYYY-MM-DD
+    revenue_by_date = {} # {'2026-02-16': 384.0, ...}
+    
+    if os.path.exists(TRANSACTIONS_CSV):
+        try:
+            with open(TRANSACTIONS_CSV, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Timestamp format: 2025-11-06 20:29:04 or 16/02/2026
+                    ts = row.get('timestamp', '')
+                    if not ts: continue
+                    
+                    # Improve date parsing to handle potentially different formats if manual edits happen
+                    # But standard format is YYYY-MM-DD HH:MM:SS
+                    try: 
+                        date_part = ts.split(' ')[0] 
+                        # If date is like 16/02/2026 (DD/MM/YYYY) -> convert to YYYY-MM-DD for consistency?
+                        # Actually standard python strftime is YYYY-MM-DD. 
+                        # Let's trust the format is consistent YYYY-MM-DD.
+                    except: continue
+
+                    if row.get('action') == 'sale':
+                        amount = 0.0
+                        # STRICT: Only use 'total_amount' from CSV
+                        if 'total_amount' in row and row['total_amount']:
+                             try:
+                                 # Remove currency symbol if accidentally saved
+                                 val_str = str(row['total_amount']).replace('₹', '').replace(',', '').strip()
+                                 amount = float(val_str)
+                             except: 
+                                 amount = 0.0
+                        
+                        # Add to daily sum
+                        revenue_by_date[date_part] = revenue_by_date.get(date_part, 0) + amount
+        except Exception as e:
+            print(f"Error calc revenue: {e}")
+
+    today_revenue = revenue_by_date.get(today_str, 0)
+
+    # 2. Low Stock Count
+    low_stock_count = 0
+    for p in products.values():
+        if p['current_stock'] <= p['threshold']:
+            low_stock_count += 1
+            
+    # 3. Pending Count
+    pending_count = len(pending_confirmations)
+    
+    return jsonify({
+        "today_revenue": round(today_revenue, 2),
+        "revenue_history": revenue_by_date,
+        "low_stock_count": low_stock_count,
+        "pending_count": pending_count,
+        "voice_active": android_client_connected
+    })
+
+if __name__ == '__main__':
+    # Try different ports if 5001 is busy
+    port = 5001
+    print(f"\n🎯 Voice Inventory Management System with Measurement Units")
+    print(f"📍 Now supports: kg, g, liters, ml, packets, bottles, pieces")
+    print(f"📍 Access: http://localhost:{port}")
+    print(f"\n🌟 Try these measurement commands:")
+    print(f"   • http://localhost:{port}/preprocess?text=2 kg aata beche")
+    print(f"   • http://localhost:{port}/preprocess?text=5 liters milk aa gaya")
+    print(f"   • http://localhost:{port}/preprocess?text=500 g sugar beche\n")
+    print(f"Type Ctrl+C to stop the server\n")
+    
+    try:
+        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+    except OSError:
+        print(f"Port {port} in use, trying {port+1}...")
+        app.run(host='0.0.0.0', port=port+1, debug=True, use_reloader=False)
