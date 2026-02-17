@@ -239,7 +239,7 @@ def process_pcm_streaming(pcm):
         # Send merged Hinglish to Flask app for processing
         try:
             if _has_requests and final_hi:
-                url = os.environ.get("APP_PROCESS_URL", "http://127.0.0.1:5000/preprocess")
+                url = os.environ.get("APP_PROCESS_URL", "http://127.0.0.1:5001/preprocess")
                 resp = requests.post(url, json={"text": final_hi}, timeout=3)
                 if resp.ok:
                     data = resp.json()
@@ -256,6 +256,19 @@ def process_pcm_streaming(pcm):
     
     return {"final": None, "final_hi": None, "final_en": None, "partial": None}
 
+
+def update_status(status):
+    """Notify app server about client connection status"""
+    try:
+        if _has_requests:
+            url = os.environ.get("APP_STATUS_URL", "http://127.0.0.1:5001/set_voice_status")
+            try:
+                requests.post(url, json={"status": status}, timeout=1)
+            except Exception:
+                pass # Fail silently
+    except Exception:
+        pass
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((HOST, PORT))
 server.listen(1)
@@ -265,6 +278,7 @@ print(f"\n🎤 Voice Stream (continuous) running on {HOST}:{PORT}\n")
 while True:
     conn, addr = server.accept()
     print(f"✅ Android connected: {addr}")
+    update_status(True) # Notify connected
     try:
         while True:
             chunk = conn.recv(4096)
@@ -279,4 +293,5 @@ while True:
         print("❌ Client disconnected or error:", e)
     finally:
         conn.close()
+        update_status(False) # Notify disconnected
         print("🔌 Waiting for next client...\n")
