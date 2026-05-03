@@ -1,5 +1,5 @@
 import requests
-from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for, flash, abort
+from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
 import os
 import re
 import json
@@ -15,66 +15,62 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+try:
+    from indicnlp.normalize.indic_normalize import IndicNormalizerFactory
+    _has_indicnlp_normalizer = True
+except Exception:
+    _has_indicnlp_normalizer = False
+try:
+    from indic_transliteration.sanscript import transliterate, Devanagari, ITRANS
+    _has_indic = True
+except Exception:
+    _has_indic = False
+# Sumy imports are made lazy inside summarize_text to avoid optional deps at startup
+
+# Optional: spaCy for basic NER (install model with `python -m spacy download en_core_web_sm`)
+try:
+    import spacy
+    _spacy_available = True
+except Exception:
+    spacy = None
+    _spacy_available = False
+
+# Lazy-loaded spaCy model cache
+_spacy_nlp = None
+
+def get_spacy_nlp():
+    """Return a loaded spaCy nlp object for 'en_core_web_sm'.
+    If model not found, attempt to download it. If download or load fails, return None."""
+    global _spacy_nlp
+    if not _spacy_available:
+        return None
+
+    if _spacy_nlp is not None:
+        return _spacy_nlp
+
+    try:
+        # First try to load
+        _spacy_nlp = spacy.load('en_core_web_sm')
+        return _spacy_nlp
+    except Exception as e:
+        print(f"WARNING: spaCy model load failed: {e}")
+        # Attempt to download the model if possible
+        try:
+            from spacy.cli import download as spacy_download
+            print("INFO: Attempting to download 'en_core_web_sm' model...")
+            spacy_download('en_core_web_sm')
+            _spacy_nlp = spacy.load('en_core_web_sm')
+            return _spacy_nlp
+        except Exception as e2:
+            print(f"WARNING: Could not download/load spaCy model: {e2}")
+            _spacy_nlp = None
+            return None
+
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "quickstock_premium_secret_2026")
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
-
-# User Credentials with Roles
-USERS = {
-    "admin": {"password": "quickstock2026", "role": "admin"},
-    "shop_shrey": {"password": "shrey2026", "role": "shop"}
-}
-
-def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def admin_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
-        if session.get('role') != 'admin':
-            abort(403) 
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user_data = USERS.get(username)
-        if user_data and user_data['password'] == password:
-            session['user'] = username
-            session['role'] = user_data['role']
-            # Redirect based on role
-            if user_data['role'] == 'admin':
-                return redirect(url_for('admin_panel'))
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid Credentials', 'danger')
-    return render_template('login_template.html')
-
-@app.route('/logout')
-def logout():
-    from flask import session, redirect, url_for
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/')
-@login_required
-def dashboard():
-    return render_template('dashboard_template.html')
 
 def get_all_products_db():
     try:
@@ -154,61 +150,99 @@ def log_transaction_in_db(action, product_name, quantity, unit, old_stock=None, 
         conn.close()
     except Exception as e:
         print(f"Error logging transaction DB: {e}")
-try:
-    from indicnlp.normalize.indic_normalize import IndicNormalizerFactory
-    _has_indicnlp_normalizer = True
-except Exception:
-    _has_indicnlp_normalizer = False
-try:
-    from indic_transliteration.sanscript import transliterate, Devanagari, ITRANS
-    _has_indic = True
-except Exception:
-    _has_indic = False
-# Sumy imports are made lazy inside summarize_text to avoid optional deps at startup
 
-# Optional: spaCy for basic NER (install model with `python -m spacy download en_core_web_sm`)
-try:
-    import spacy
-    _spacy_available = True
-except Exception:
-    spacy = None
-    _spacy_available = False
-
-# Lazy-loaded spaCy model cache
-_spacy_nlp = None
-
-def get_spacy_nlp():
-    """Return a loaded spaCy nlp object for 'en_core_web_sm'.
-    If model not found, attempt to download it. If download or load fails, return None."""
-    global _spacy_nlp
-    if not _spacy_available:
-        return None
-
-    if _spacy_nlp is not None:
-        return _spacy_nlp
-
+def load_transactions_from_db(limit=None):
+    """Load transaction history from DB"""
     try:
-        # First try to load
-        _spacy_nlp = spacy.load('en_core_web_sm')
-        return _spacy_nlp
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        query = "SELECT id, product_name, quantity, transaction_type, unit, timestamp, old_stock, new_stock FROM transactions ORDER BY timestamp DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+            
+        cur.execute(query)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        transactions = []
+        for r in rows:
+            transactions.append({
+                'id': r[0],
+                'product': r[1],
+                'quantity': r[2],
+                'action': r[3],
+                'unit': r[4],
+                'timestamp': r[5].strftime('%Y-%m-%d %H:%M:%S'),
+                'old_stock': r[6],
+                'new_stock': r[7]
+            })
+        return transactions
     except Exception as e:
-        print(f"WARNING: spaCy model load failed: {e}")
-        # Attempt to download the model if possible
-        try:
-            from spacy.cli import download as spacy_download
-            print("INFO: Attempting to download 'en_core_web_sm' model...")
-            spacy_download('en_core_web_sm')
-            _spacy_nlp = spacy.load('en_core_web_sm')
-            return _spacy_nlp
-        except Exception as e2:
-            print(f"WARNING: Could not download/load spaCy model: {e2}")
-            _spacy_nlp = None
-            return None
+        print(f"Error fetching transactions from DB: {e}")
+        return []
 
-# Removed duplicate app = Flask(__name__)
+# User Credentials with Roles
+USERS = {
+    "admin": {"password": "quickstock2026", "role": "admin"},
+    "shop_shrey": {"password": "shrey2026", "role": "shop"}
+}
+
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        if session.get('role') != 'admin':
+            from flask import abort
+            abort(403) 
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    from flask import redirect, url_for, session, render_template, flash
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user_data = USERS.get(username)
+        if user_data and user_data['password'] == password:
+            session['user'] = username
+            session['role'] = user_data['role']
+            # Redirect based on role
+            if user_data['role'] == 'admin':
+                return redirect(url_for('admin_panel'))
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid credentials')
+    return render_template('login_template.html')
+
+@app.route('/logout')
+def logout():
+    from flask import session, redirect, url_for
+    session.clear()
+    return redirect(url_for('login'))
 
 # Create uploads directory if it doesn't exist
 os.makedirs('./test_audio_files', exist_ok=True)
+
+# CSV file path for storing completed transactions
+TRANSACTIONS_CSV = os.path.join(os.path.dirname(__file__), 'transactions_history.csv')
+
+# Transaction log to track all inventory changes
+transaction_log = []
 
 # Pending confirmations from voice input
 pending_confirmations = []
@@ -244,9 +278,25 @@ unit_name_english = {
     "मिलीलीटर": "ml"
 }
 
-# Products are now fetched from DB dynamically using get_all_products_db()
-# The global 'products' dict is removed. Functions should call get_all_products_db()
-# or query the database directly.
+# Enhanced database with measurement units and base units
+# Enhanced database with measurement units and base units
+products = {
+    "पारले जी": {"current_stock": 100, "threshold": 20, "unit": "पैकेट", "base_unit": "पैकेट", "price": 10},
+    "लेस": {"current_stock": 50, "threshold": 15, "unit": "पैकेट", "base_unit": "पैकेट", "price": 20},
+    "डाबर हनी": {"current_stock": 30, "threshold": 10, "unit": "बोतल", "base_unit": "बोतल", "price": 150},
+    "टाटा नमक": {"current_stock": 80, "threshold": 25, "unit": "पैकेट", "base_unit": "पैकेट", "price": 25},
+    "कोक": {"current_stock": 40, "threshold": 12, "unit": "बोतल", "base_unit": "बोतल", "price": 40},
+    "साबुन": {"current_stock": 25, "threshold": 8, "unit": "पीस", "base_unit": "पीस", "price": 35},
+
+    "आटा": {"current_stock": 100, "threshold": 25, "unit": "किलो", "base_unit": "किलो", "price": 45},
+    "चावल": {"current_stock": 150, "threshold": 30, "unit": "किलो", "base_unit": "किलो", "price": 60},
+    "दाल": {"current_stock": 80, "threshold": 20, "unit": "किलो", "base_unit": "किलो", "price": 120},
+    "चीनी": {"current_stock": 60, "threshold": 15, "unit": "किलो", "base_unit": "किलो", "price": 42},
+
+    "तेल": {"current_stock": 50, "threshold": 12, "unit": "लीटर", "base_unit": "लीटर", "price": 180},
+    "दूध": {"current_stock": 40, "threshold": 10, "unit": "लीटर", "base_unit": "लीटर", "price": 66},
+    "चाय": {"current_stock": 5, "threshold": 2, "unit": "किलो", "base_unit": "किलो", "price": 450},
+}
 
 # Measurement unit conversions (to base units)
 unit_conversions = {
@@ -418,9 +468,8 @@ def preprocess_text(text):
 
     # Automatic ASR correction (fuzzy + cache + optional LLM)
     try:
-        current_products = get_all_products_db()
         # lazy import local helper (defined below)
-        text = auto_correct_asr(text, product_names=list(current_products.keys()))
+        text = auto_correct_asr(text, product_names=list(products.keys()))
         print(f"[DEBUG] After ASR auto-correct: '{text}'")
     except Exception as e:
         print(f"ASR auto-correct failed: {e}")
@@ -440,16 +489,14 @@ def find_product(product_name):
     product_name = product_name.strip()
     print(f"[DEBUG] find_product input: '{product_name}'")
     
-    current_products = get_all_products_db()
-
     # Exact match
-    if product_name in current_products:
+    if product_name in products:
         print(f"[DEBUG] find_product exact match: '{product_name}'")
         return product_name
     
     # Partial match (only for sufficiently long tokens)
     if len(product_name) >= 3:
-        for known_product in current_products.keys():
+        for known_product in products.keys():
             if product_name in known_product or known_product in product_name:
                 print(f"[DEBUG] find_product partial matched '{product_name}' -> '{known_product}'")
                 return known_product
@@ -495,7 +542,7 @@ def find_product(product_name):
 
     # Fuzzy fallback (difflib) for Devanagari names
     if len(product_name) >= 3:
-        candidates = list(current_products.keys())
+        candidates = list(products.keys())
         matches = difflib.get_close_matches(product_name, candidates, n=1, cutoff=0.75)
         if matches:
             print(f"[DEBUG] find_product fuzzy matched '{product_name}' -> '{matches[0]}'")
@@ -809,21 +856,16 @@ def parse_quantity_and_unit(text):
             product_key = find_product(product_text)
             
             if product_key:
-                current_products = get_all_products_db()
-                if product_key not in current_products:
-                    print(f"[DEBUG] product_key {product_key} not found in DB")
-                    return quantity, product_key, unit
-                    
                 # If unit is specified, convert to product's base unit
                 if unit and unit in unit_conversions:
                     base_quantity = quantity * unit_conversions[unit]
-                    actual_quantity = base_quantity / unit_conversions[current_products[product_key]['base_unit']]
+                    actual_quantity = base_quantity / unit_conversions[products[product_key]['base_unit']]
                     print(f"[DEBUG] Parsed quantity={quantity}, unit='{unit}', product='{product_key}', actual_quantity={actual_quantity}")
                     return actual_quantity, product_key, unit
                 else:
                     # Use product's default unit
                     print(f"[DEBUG] Parsed quantity={quantity}, default unit for product='{product_key}'")
-                    return quantity, product_key, current_products[product_key]['unit']
+                    return quantity, product_key, products[product_key]['unit']
     
     # Fallback: simple number and product detection
     words = text.split()
@@ -837,12 +879,11 @@ def parse_quantity_and_unit(text):
         if word.replace('.', '').isdigit():
             quantity = float(word)
             # Look for product in surrounding words
-            current_products = get_all_products_db()
             for j in range(max(0, i-2), min(len(words), i+3)):
                 potential_product = find_product(words[j])
-                if potential_product and potential_product in current_products:
+                if potential_product:
                     product_key = potential_product
-                    unit = current_products[product_key]['unit']
+                    unit = products[product_key]['unit']
                     break
             break
     
@@ -1059,10 +1100,9 @@ def process_multiple_products_command(original_text, products_list, apply=True):
     
     print(f"[DEBUG] Multiple products detected: {len(products_list)} items, action: {action_type}")
     
+    current_products = get_all_products_db()
     results = []
     errors = []
-    
-    current_products = get_all_products_db()
     
     for quantity, product_key, unit in products_list:
         if product_key not in current_products:
@@ -1070,17 +1110,19 @@ def process_multiple_products_command(original_text, products_list, apply=True):
                 'product': product_key,
                 'quantity': quantity,
                 'unit': unit,
-                'message': f"Product {product_key} not found."
+                'message': f"Product '{product_key}' not found."
             })
             continue
 
         display_unit = unit if unit else current_products[product_key]['unit']
-        old_stock = current_products[product_key]["current_stock"]
+        old_stock = current_products[product_key]['current_stock']
         
         if action_type == 'restock':
             new_stock = old_stock + quantity
             if apply:
-                update_product_stock_in_db(product_key, new_stock)
+                # SMART THRESHOLD: Update to 20% of new stock
+                new_threshold = max(1, int(new_stock * 0.2))
+                update_product_stock_in_db(product_key, new_stock, new_threshold=new_threshold)
                 log_transaction_in_db('restock', product_key, quantity, display_unit, old_stock=old_stock, new_stock=new_stock)
                 print(f"RESTOCKED: {quantity} {display_unit} {product_key}. New stock: {new_stock}")
             
@@ -1167,11 +1209,11 @@ def process_text_command(text, apply=True):
 
         print(f"Action detection - Restock: {restock_found}, Sale: {sale_found}")
         
-        # AUTO-CREATE: Only on RESTOCK, not on SALE
+        # 🆕 AUTO-CREATE: Only on RESTOCK, not on SALE
         if product_key not in current_products:
             if restock_found and not sale_found:
                 # This is a restock of a new product - create it
-                print(f"NEW PRODUCT DETECTED: '{product_key}' - Auto-creating...")
+                print(f"🆕 NEW PRODUCT DETECTED: '{product_key}' - Auto-creating...")
                 
                 # Determine unit (use detected unit or default to 'packet')
                 new_unit = unit if unit else 'packet'
@@ -1180,14 +1222,14 @@ def process_text_command(text, apply=True):
                 # Create new product
                 create_product_in_db(product_key, 0, new_threshold, new_unit, new_unit, 0)
                 product_name_english[product_key] = product_key.title()
-                print(f"Created: {product_key} | Unit: {new_unit} | Threshold: {new_threshold}")
+                print(f"✅ Created: {product_key} | Unit: {new_unit} | Threshold: {new_threshold}")
                 
                 # Refresh product list
                 current_products = get_all_products_db()
             else:
                 return {
                     'action': 'error',
-                    'message': f"Product '{product_key}' not found in inventory. Please add it first using restock."
+                    'message': f"❌ Product '{product_key}' not found in inventory. Please add it first using restock."
                 }
         
         # Product definitely exists, proceed with action
@@ -1198,9 +1240,8 @@ def process_text_command(text, apply=True):
         if restock_found and not sale_found:
             new_stock = old_stock + quantity
             if apply:
-                # SMART THRESHOLD: Update to 20% of new stock
+                # 🧠 SMART THRESHOLD: Update to 20% of new stock
                 new_threshold = max(1, int(new_stock * 0.2))
-                
                 update_product_stock_in_db(product_key, new_stock, new_threshold=new_threshold)
                 log_transaction_in_db('restock', product_key, quantity, display_unit, old_stock=old_stock, new_stock=new_stock)
                 
@@ -1245,7 +1286,7 @@ def process_text_command(text, apply=True):
                     'unit': display_unit,
                     'old_stock': old_stock,
                     'new_stock': old_stock,
-                    'message': f"Not enough {product_key}. Only {old_stock} {current_products[product_key]['unit']} left."
+                    'message': f"❌ Not enough {product_key}. Only {old_stock} {current_products[product_key]['unit']} left."
                 }
     
     # If only product found, assume it's a QUERY
@@ -1272,13 +1313,13 @@ def process_text_command(text, apply=True):
             'product': None,
             'quantity': quantity,
             'unit': unit,
-            'message': f"Understood quantity {quantity}, but didn't recognize the product. Available: {', '.join(current_products.keys())}"
+            'message': f"❓ Understood quantity {quantity}, but didn't recognize the product. Available: {', '.join(current_products.keys())}"
         }
     
     return {
         'action': 'unknown',
         'apply': False,
-        'message': "Sorry, I didn't understand. Try: '2 kg aata beche' or '5 liters milk aa gaya' or 'kitna chawal bacha hai'"
+        'message': "❓ Sorry, I didn't understand. Try: '2 kg aata beche' or '5 liters milk aa gaya' or 'kitna chawal bacha hai'"
     }
 
 
@@ -1401,12 +1442,13 @@ def preprocess_demo():
         'original_text': text,
         'preprocessed_text': processed_text,
         'nlu_result': nlu_result,
-        'inventory': get_all_products_db(),
+        'inventory': products,
         'applied': confirm_flag,
         'pending': not confirm_flag and nlu_result.get('action') in valid_actions
     })
 
 @app.route('/test_audio', methods=['GET'])
+@login_required
 def test_audio():
     """Endpoint for testing audio files - pure transcription only."""
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1441,7 +1483,7 @@ def test_audio():
             'summary': summary,
             'entities': entities,
             'result': nlu_result,
-            'inventory': get_all_products_db()
+            'inventory': products
         })
 
     except Exception as e:
@@ -1461,44 +1503,24 @@ def save_transaction_to_csv(transaction):
         
         writer.writerow(transaction)
 
-def load_transactions_from_db(limit=None):
-    """Load transaction history from DB"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        query = "SELECT id, product_name, quantity, transaction_type, unit, timestamp, old_stock, new_stock FROM transactions ORDER BY timestamp DESC"
-        if limit:
-            query += f" LIMIT {limit}"
-            
-        cur.execute(query)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        
-        transactions = []
-        for r in rows:
-            transactions.append({
-                'id': r[0],
-                'product': r[1],
-                'quantity': r[2],
-                'action': r[3],
-                'unit': r[4],
-                'timestamp': r[5].strftime('%Y-%m-%d %H:%M:%S'),
-                'old_stock': r[6],
-                'new_stock': r[7]
-            })
-        return transactions
-    except Exception as e:
-        print(f"Error fetching transactions from DB: {e}")
+def load_transactions_from_csv():
+    """Load transaction history from CSV file"""
+    if not os.path.exists(TRANSACTIONS_CSV):
         return []
+    
+    transactions = []
+    with open(TRANSACTIONS_CSV, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            transactions.append(row)
+    
+    return transactions
 
 @app.route('/inventory', methods=['GET'])
 @login_required
 def get_inventory():
-    current_products = get_all_products_db()
     return jsonify({
-        'products': current_products,
+        'products': get_all_products_db(),
         'english_names': product_name_english,
         'unit_names': unit_name_english
     })
@@ -1510,10 +1532,11 @@ def get_transactions():
     recent = load_transactions_from_db(limit=50)
     return jsonify({
         'transactions': recent,
-        'total_count': len(recent)
+        'total_count': len(recent) # This is a limit, but fine for 'recent' view
     })
 
 @app.route('/bulk_restock_history', methods=['GET'])
+@login_required
 def get_bulk_restock_history():
     """Get bulk restock history from CSV"""
     BULK_CSV = "bulk_restock_history.csv"
@@ -1579,6 +1602,7 @@ def confirm_action():
     })
 
 @app.route('/reject_action', methods=['POST'])
+@login_required
 def reject_action():
     """Reject a pending action by ID"""
     data = request.get_json()
@@ -1597,6 +1621,7 @@ def reject_action():
     return jsonify({'error': 'Action not found'}), 404
 
 @app.route('/update_price', methods=['POST'])
+@login_required
 def update_price():
     """Update the price of a product."""
     data = request.get_json()
@@ -1607,7 +1632,7 @@ def update_price():
         return jsonify({'error': 'Missing product or price'}), 400
 
     current_products = get_all_products_db()
-
+    
     # Try to find by key or value
     target_key = None
     if product_name in current_products:
@@ -1615,7 +1640,7 @@ def update_price():
     else:
         # Try finding by English name
         for k, v in product_name_english.items():
-            if v.lower() == product_name.lower() and k in current_products:
+            if v.lower() == product_name.lower():
                 target_key = k
                 break
     
@@ -1630,6 +1655,7 @@ def update_price():
     return jsonify({'error': 'Product not found'}), 404
 
 @app.route('/edit_pending', methods=['POST'])
+@login_required
 def edit_pending():
     """Edit a pending transaction"""
     data = request.get_json()
@@ -1642,7 +1668,7 @@ def edit_pending():
         return jsonify({'error': 'Missing action ID'}), 400
     
     current_products = get_all_products_db()
-
+    
     # Find the pending action
     for i, p in enumerate(pending_confirmations):
         if p['id'] == action_id:
@@ -1715,6 +1741,7 @@ def edit_pending():
     return jsonify({'error': 'Action not found'}), 404
 
 @app.route('/manual_entry', methods=['POST'])
+@login_required
 def manual_entry():
     """Manually add a transaction"""
     data = request.get_json()
@@ -1767,66 +1794,60 @@ def manual_entry():
         'inventory': get_all_products_db()
     })
 
+@app.route('/export_csv', methods=['GET'])
+@login_required
+def export_csv():
+    """Export transaction history as CSV"""
+    if not os.path.exists(TRANSACTIONS_CSV):
+        return jsonify({'error': 'No transactions to export'}), 404
+    
+    return send_file(TRANSACTIONS_CSV, as_attachment=True, download_name='transactions_history.csv')
+
 @app.route('/transaction_history', methods=['GET'])
+@login_required
 def get_transaction_history():
     """Get all transaction history from DB"""
     transactions = load_transactions_from_db()
     return jsonify({
-        'transactions': transactions,  # DB returns recent first
+        'transactions': transactions, # It's already sorted DESC by DB
         'total_count': len(transactions)
     })
 
 @app.route('/reset', methods=['GET'])
+@admin_required
 def reset_inventory():
-    global pending_confirmations
+    global products, transaction_log, pending_confirmations
+    transaction_log = []  # Clear transaction log
     pending_confirmations = []  # Clear pending confirmations
-    
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Clear transactions and products table
-        cur.execute("TRUNCATE TABLE transactions")
-        cur.execute("TRUNCATE TABLE products")
-        
-        initial_products = {
-            "पारले जी": {"current_stock": 100, "threshold": 20, "unit": "पैकेट", "base_unit": "पैकेट", "price": 10},
-            "लेज़": {"current_stock": 50, "threshold": 15, "unit": "पैकेट", "base_unit": "पैकेट", "price": 20},
-            "डाबर हनी": {"current_stock": 30, "threshold": 10, "unit": "बोतल", "base_unit": "बोतल", "price": 150},
-            "टाटा नमक": {"current_stock": 80, "threshold": 25, "unit": "पैकेट", "base_unit": "पैकेट", "price": 25},
-            "कोक": {"current_stock": 40, "threshold": 12, "unit": "बोतल", "base_unit": "बोतल", "price": 40},
-            "साबुन": {"current_stock": 25, "threshold": 8, "unit": "पीस", "base_unit": "पीस", "price": 35},
-            "आटा": {"current_stock": 100, "threshold": 25, "unit": "किलो", "base_unit": "किलो", "price": 45},
-            "चावल": {"current_stock": 150, "threshold": 30, "unit": "किलो", "base_unit": "किलो", "price": 60},
-            "दाल": {"current_stock": 80, "threshold": 20, "unit": "किलो", "base_unit": "किलो", "price": 120},
-            "चीनी": {"current_stock": 60, "threshold": 15, "unit": "किलो", "base_unit": "किलो", "price": 42},
-            "तेल": {"current_stock": 50, "threshold": 12, "unit": "लीटर", "base_unit": "लीटर", "price": 180},
-            "दूध": {"current_stock": 40, "threshold": 10, "unit": "लीटर", "base_unit": "लीटर", "price": 66},
-            "चाय": {"current_stock": 5, "threshold": 2, "unit": "किलो", "base_unit": "किलो", "price": 450},
-        }
+    products = {
+        "पारले जी": {"current_stock": 100, "threshold": 20, "unit": "पैकेट", "base_unit": "पैकेट"},
+        "लेज़": {"current_stock": 50, "threshold": 15, "unit": "पैकेट", "base_unit": "पैकेट"},
+        "डाबर हनी": {"current_stock": 30, "threshold": 10, "unit": "बोतल", "base_unit": "बोतल"},
+        "टाटा नमक": {"current_stock": 80, "threshold": 25, "unit": "पैकेट", "base_unit": "पैकेट"},
+        "कोक": {"current_stock": 40, "threshold": 12, "unit": "बोतल", "base_unit": "बोतल"},
+        "साबुन": {"current_stock": 25, "threshold": 8, "unit": "पीस", "base_unit": "पीस"},
+        "आटा": {"current_stock": 100, "threshold": 25, "unit": "किलो", "base_unit": "किलो"},
+        "चावल": {"current_stock": 150, "threshold": 30, "unit": "किलो", "base_unit": "किलो"},
+        "दाल": {"current_stock": 80, "threshold": 20, "unit": "किलो", "base_unit": "किलो"},
+        "चीनी": {"current_stock": 60, "threshold": 15, "unit": "किलो", "base_unit": "किलो"},
+        "तेल": {"current_stock": 50, "threshold": 12, "unit": "लीटर", "base_unit": "लीटर"},
+        "दूध": {"current_stock": 40, "threshold": 10, "unit": "लीटर", "base_unit": "लीटर"},
+        "चाय": {"current_stock": 5, "threshold": 2, "unit": "किलो", "base_unit": "किलो"},
+    }
+    return jsonify({"message": "Inventory reset", "inventory": products})
 
-        # Repopulate products table
-        for name, details in initial_products.items():
-            cur.execute("""
-                INSERT INTO products (name, current_stock, threshold, unit, base_unit, price)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (name, details['current_stock'], details['threshold'], details['unit'], details['base_unit'], details['price']))
-            
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-    except Exception as e:
-        print(f"Error resetting DB: {e}")
-        return jsonify({"message": f"Error resetting DB: {e}"}), 500
-        
-    return jsonify({"message": "Inventory reset", "inventory": get_all_products_db()})
-
-
+@app.route('/')
+@login_required
+def home():
+    # Serve the professional dashboard template using standard render_template
+    return render_template('dashboard_template.html')
 
 @app.route('/old_home')
+@login_required
 def old_home():
-    # Generate the inventory table HTML (same as before)
+    # For the old simple view, we still use the old raw HTML but we need to ensure local references work
+    # However, since we have the new theme, it's better to just use render_template if possible
+    # But if specifically 'old' is needed, we'll keep the logic but fix path if it was used
     inventory_table = """
     <table border="1" style="border-collapse: collapse; width: 100%; margin: 20px 0; font-family: Arial, sans-serif;">
         <thead>
@@ -1841,7 +1862,7 @@ def old_home():
         <tbody>
     """
     
-    for product, details in get_all_products_db().items():
+    for product, details in products.items():
         current_stock = details['current_stock']
         threshold = details['threshold']
         unit = details['unit']
@@ -2195,6 +2216,7 @@ def old_home():
     """
 
 @app.route('/history', methods=['GET'])
+@login_required
 def get_history():
     """Returns the transaction history from DB."""
     history_data = load_transactions_from_db()
@@ -2216,6 +2238,7 @@ def set_client_status():
         print(f"📱 Android Client Status: {status}")
         return jsonify({"status": "updated", "connected": android_client_connected})
     return jsonify({"error": "Invalid data"}), 400
+
 
 @app.route('/dashboard_stats', methods=['GET'])
 @login_required
@@ -2357,6 +2380,7 @@ def order_distributor():
     # Mocking order placement
     print(f"ORDER PLACED for {item} to Distributor")
     return jsonify({"success": True, "message": f"Order for {item} successfully sent to distributor!"})
+
 
 if __name__ == '__main__':
     # Try different ports if 5001 is busy

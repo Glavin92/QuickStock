@@ -4,12 +4,22 @@ import json
 import os
 import sys
 import re
+import csv
+from datetime import datetime
 from vosk import Model, KaldiRecognizer
 try:
     import requests
     _has_requests = True
 except Exception:
     _has_requests = False
+
+# 🔵 BULK RESTOCK MODE
+BULK_MODE_ACTIVE = False  # Global state: Is bulk mode on?
+BULK_START_KEYWORDS = ['inventory setup start', 'स्टॉक शुरू करो', 'setup start', 'stock start']
+BULK_STOP_KEYWORDS = ['setup stop', 'स्टॉक बंद करो', 'stock stop', 'setup band']
+bulk_items_added = []  # Track items added in bulk mode
+bulk_start_time = None  # Track when bulk mode started
+BULK_RESTOCK_CSV = "bulk_restock_history.csv"  # CSV file for bulk sessions
 
 try:
     from indic_transliteration.sanscript import transliterate, Devanagari, ITRANS
@@ -198,6 +208,8 @@ def process_pcm_streaming(pcm):
     
     # Handle final results - combine or prioritize
     if results["final_hi"] or results["final_en"]:
+        global BULK_MODE_ACTIVE, bulk_items_added
+        
         final_hi = results["final_hi"]
         final_en = results["final_en"]
         
@@ -221,6 +233,73 @@ def process_pcm_streaming(pcm):
             chosen_lang = "en"
             print("✅ Final (English):", final_en)
         
+        # 🔵 BULK MODE DETECTION
+        chosen_lower = chosen.lower()
+        
+        # Check for START keywords
+        is_bulk_start = any(keyword in chosen_lower for keyword in BULK_START_KEYWORDS)
+        if is_bulk_start:
+            global bulk_start_time
+            BULK_MODE_ACTIVE = True
+            bulk_items_added = []
+            bulk_start_time = datetime.now()
+            print(f"🔵 BULK RESTOCK MODE ACTIVATED at {bulk_start_time.strftime('%H:%M:%S')} - Say items to add, then say 'SETUP STOP'")
+            return {
+                "final": chosen,
+                "bulk_mode": "started",
+                "message": "Bulk mode activated"
+            }
+        
+        # Check for STOP keywords
+        is_bulk_stop = any(keyword in chosen_lower for keyword in BULK_STOP_KEYWORDS)
+        if is_bulk_stop:
+            if BULK_MODE_ACTIVE:
+                BULK_MODE_ACTIVE = False
+                count = len(bulk_items_added)
+                end_time = datetime.now()
+                print(f"💚 BULK MODE COMPLETE - {count} items added: {bulk_items_added}")
+                
+                # Save to CSV
+                try:
+                    file_exists = os.path.exists(BULK_RESTOCK_CSV)
+                    with open(BULK_RESTOCK_CSV, mode='a', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        if not file_exists:
+                            writer.writerow(['timestamp', 'date', 'time', 'items_count', 'items_list'])
+                        
+                        items_str = '; '.join(bulk_items_added)
+                        writer.writerow([
+                            bulk_start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                            bulk_start_time.strftime('%Y-%m-%d'),
+                            bulk_start_time.strftime('%H:%M:%S'),
+                            count,
+                            items_str
+                        ])
+                    print(f"📝 Bulk session saved to {BULK_RESTOCK_CSV}")
+                except Exception as e:
+                    print(f"❌ Failed to save bulk session: {e}")
+                
+                items_copy = bulk_items_added.copy()
+                bulk_items_added = []
+                bulk_start_time = None
+                return {
+                    "final": chosen,
+                    "bulk_mode": "stopped",
+                    "items_added": items_copy,
+                    "count": count
+                }
+            else:
+                print("⚠️ Bulk mode was not active")
+                return {"final": chosen, "ignored": True}
+        
+        # If in bulk mode, force restock behavior
+        if BULK_MODE_ACTIVE:
+            print(f"🔵 BULK MODE ACTIVE - Processing as restock")
+            # Force add restock keyword if not present
+            if not any(kw in chosen_lower for kw in ['आ गया', 'आया', 'aa gaya']):
+                final_hi = final_hi + " आ गया" if final_hi else chosen + " aa gaya"
+                print(f"🔵 Modified for restock: {final_hi}")
+        
         # Build merged Hinglish: Hindi (transliterated) + detected English tokens
         merged_hinglish = to_latin(chosen) if chosen_lang == "hi" else chosen
         if _english_word_buffer:
@@ -239,12 +318,19 @@ def process_pcm_streaming(pcm):
         # Send merged Hinglish to Flask app for processing
         try:
             if _has_requests and final_hi:
-                url = os.environ.get("APP_PROCESS_URL", "http://127.0.0.1:5000/preprocess")
+                url = os.environ.get("APP_PROCESS_URL", "http://127.0.0.1:5001/preprocess")
                 resp = requests.post(url, json={"text": final_hi}, timeout=3)
                 if resp.ok:
                     data = resp.json()
                     result = data.get("nlu_result") or data
                     print("🧠 App processed:", result)
+                    
+                    # Track items in bulk mode
+                    if BULK_MODE_ACTIVE and result.get('action') == 'restock':
+                        product = result.get('product', 'unknown')
+                        quantity = result.get('quantity', 0)
+                        bulk_items_added.append(f"{quantity} {product}")
+                        print(f"📦 Bulk item #{len(bulk_items_added)}: {quantity} {product}")
                 else:
                     print("❌ App response:", resp.status_code, (resp.text or "")[:200])
             elif not _has_requests:
@@ -256,6 +342,14 @@ def process_pcm_streaming(pcm):
     
     return {"final": None, "final_hi": None, "final_en": None, "partial": None}
 
+def notify_flask_status(connected):
+    try:
+        if _has_requests:
+            url = os.environ.get("FLASK_STATUS_URL", "http://127.0.0.1:5001/set_client_status")
+            requests.post(url, json={"connected": connected}, timeout=2)
+    except Exception as e:
+        print(f"⚠️ Could not notify Flask: {e}")
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((HOST, PORT))
 server.listen(1)
@@ -265,6 +359,7 @@ print(f"\n🎤 Voice Stream (continuous) running on {HOST}:{PORT}\n")
 while True:
     conn, addr = server.accept()
     print(f"✅ Android connected: {addr}")
+    notify_flask_status(True)
     try:
         while True:
             chunk = conn.recv(4096)
@@ -279,4 +374,5 @@ while True:
         print("❌ Client disconnected or error:", e)
     finally:
         conn.close()
+        notify_flask_status(False)
         print("🔌 Waiting for next client...\n")

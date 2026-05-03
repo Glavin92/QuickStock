@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Headquarters | QuickStock Intelligence</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020617;
+            --surface: #0f172a;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+            --glass: rgba(30, 41, 59, 0.7);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2.5rem;
+            background-image: radial-gradient(circle at top right, #1e1b4b, transparent);
+        }
+
+        .header {
+            margin-bottom: 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .btn-hq {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-hq:hover {
+            color: var(--primary);
+        }
+
+        /* --- Stats Overview --- */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            padding: 1.8rem;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100px;
+            background: var(--primary-glow);
+            filter: blur(40px);
+            border-radius: 50%;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 800;
+        }
+
+        /* --- Shop Cards --- */
+        .network-grid {
+            display: grid;
+            gap: 1.2rem;
+        }
+
+        .shop-card {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .shop-card:hover {
+            transform: scale(1.01) translateY(-5px);
+            background: var(--surface);
+            border-color: var(--primary);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .shop-info h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .shop-info p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .status-chip {
+            padding: 6px 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-online {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-success);
+        }
+
+        .status-offline {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+        }
+
+        .sales-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .growth-tag {
+            color: var(--accent-success);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .btn-control {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-control:hover {
+            filter: brightness(1.2);
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        @media (max-width: 1024px) {
+            .shop-card {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .btn-control {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div>
+            <a href="/" class="btn-hq"><i class="ri-dashboard-3-line"></i> Main Command</a>
+            <h1 style="font-size: 2.8rem; font-weight: 800; margin-top: 5px; letter-spacing: -1px;">
+                Network <span style="color: var(--primary);">HQ</span>
+            </h1>
+            <p style="color: var(--text-muted);">Real-time monitoring for your entire business empire.</p>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 5px;">Server Status</div>
+            <div
+                style="color: var(--accent-success); font-weight: 700; display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                <span
+                    style="width: 8px; height: 8px; background: var(--accent-success); border-radius: 50%; display: block; box-shadow: 0 0 10px var(--accent-success);"></span>
+                ENCRYPTION ACTIVE
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Network Revenue</div>
+            <div class="stat-value">₹{{ "{:,.2f}".format(network_total) }}</div>
+            <div class="growth-tag" style="margin-top: 5px;"><i class="ri-arrow-right-up-line"></i> +8.4% this week
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Nodes</div>
+            <div class="stat-value">{{ online_count }}/{{ total_shops }}</div>
+            <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Current Availability</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Network Health</div>
+            <div class="stat-value">98.2%</div>
+            <div style="color: var(--accent-success); font-size: 0.9rem; margin-top: 5px;">Operational</div>
+        </div>
+    </div>
+
+    <h2 style="margin-bottom: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 10px;">
+        <i class="ri-broadcast-line" style="color: var(--primary);"></i>
+        Live Branch Feed
+    </h2>
+
+    <div class="network-grid">
+        {% for shop in shops %}
+        <div class="shop-card">
+            <div class="shop-info">
+                <h3>{{ shop.name }}</h3>
+                <p><i class="ri-map-pin-2-line"></i> {{ shop.location }}</p>
+            </div>
+
+            <div>
+                <span class="status-chip status-{{ shop.status|lower }}">
+                    <i class="ri-{{ 'checkbox-circle' if shop.status == 'Online' else 'error-warning' }}-line"></i>
+                    {{ shop.status }}
+                </span>
+            </div>
+
+            <div class="sales-value">
+                ₹{{ "{:,.0f}".format(shop.daily_sales) }}
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">DAILY SALES</div>
+            </div>
+
+            <div class="growth-tag">
+                <i class="ri-line-chart-line"></i> {{ shop.growth }}
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">LAST SYNC: {{
+                    shop.last_sync }}</div>
+            </div>
+
+            <button class="btn-control" onclick="alert('Initiating remote secure tunnel for {{ shop.name }}...')">
+                <i class="ri-terminal-box-line"></i> MANAGE
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div
+        style="margin-top: 4rem; padding: 2rem; border-top: 1px solid rgba(255,255,255,0.05); text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+        &copy; 2026 QuickStock™ Intelligence Systems. All branches encrypted with AES-256.
+    </div>
+</body>
+
+</html>

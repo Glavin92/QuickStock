@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Low Stock Notifications | QuickStock</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --surface: #ffffff;
+            --primary: #4f46e5;
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            padding: 2.5rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .btn-back {
+            text-decoration: none;
+            color: var(--text-muted);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+
+        .btn-back:hover {
+            color: var(--primary);
+        }
+
+        .notifications-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .notif-card {
+            background: white;
+            border-radius: 24px;
+            padding: 1.8rem;
+            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            transition: all 0.3s;
+        }
+
+        .notif-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+            border-color: #ef4444;
+        }
+
+        .notif-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .item-name {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .stock-badge {
+            background: #fee2e2;
+            color: #ef4444;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .btn-order {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+
+        .btn-order:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+        }
+
+        .btn-order:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 5rem;
+            grid-column: 1 / -1;
+            color: var(--text-muted);
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: #10b981;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div>
+            <a href="/" class="btn-back"><i class="ri-arrow-left-line"></i> Back to Dashboard</a>
+            <h1 style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">Low Stock Alerts</h1>
+            <p style="color: var(--text-muted);">Items with critical stock levels (<= 3 units).</p>
+        </div>
+        <i class="ri-notification-3-line" style="font-size: 2.5rem; color: #ef4444;"></i>
+    </div>
+
+    <div class="notifications-grid">
+        {% if items %}
+        {% for item in items %}
+        <div class="notif-card" id="card-{{ item.name }}">
+            <div class="notif-header">
+                <div class="item-name">{{ item.name }}</div>
+                <div class="stock-badge">{{ item.current_stock }} {{ item.unit }} left</div>
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.95rem;">
+                Threshold: {{ item.threshold }} | Current Stock is critical.
+            </div>
+            <button class="btn-order" onclick="placeOrder('{{ item.name }}')">
+                <i class="ri-truck-line"></i> Order from Distributor
+            </button>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <i class="ri-checkbox-circle-fill"></i>
+            <h2>Inventory is healthy!</h2>
+            <p>No items are currently below the critical threshold.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        async function placeOrder(itemName) {
+            const btn = event.target.closest('button');
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/order_distributor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item: itemName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    btn.style.background = '#10b981';
+                    btn.innerHTML = '<i class="ri-check-line"></i> Order Placed!';
+                    setTimeout(() => {
+                        document.getElementById('card-' + itemName).style.opacity = '0.5';
+                    }, 1000);
+                }
+            } catch (e) {
+                console.error(e);
+                btn.innerHTML = 'Error! Try again';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

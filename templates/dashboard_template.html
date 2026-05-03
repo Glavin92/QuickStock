@@ -362,6 +362,27 @@
                 <i class="ri-file-list-3-line"></i>
                 <span>History Log</span>
             </div>
+            <hr style="border: none; border-top: 1px solid rgba(0,0,0,0.05); margin: 0.5rem 0;">
+            <a href="/notifications" class="nav-item" style="text-decoration: none;">
+                <i class="ri-notification-3-line" style="color: #ef4444;"></i>
+                <span style="color: #ef4444;">Notifications</span>
+            </a>
+            <a href="/market-trends" class="nav-item" style="text-decoration: none;">
+                <i class="ri-funds-line"></i>
+                <span>Market Trends</span>
+            </a>
+            {% if session['role'] == 'admin' %}
+            <a href="/admin" class="nav-item" style="text-decoration: none;">
+                <i class="ri-admin-line"></i>
+                <span>Admin Panel</span>
+            </a>
+            {% endif %}
+            <div style="margin-top: auto;">
+                <a href="/logout" class="nav-item" style="text-decoration: none; color: #94a3b8;">
+                    <i class="ri-logout-box-r-line"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
         </nav>
     </aside>
 
@@ -584,120 +605,143 @@
             try {
                 // Fetch System Stats (Revenue, Status, Counts)
                 const sRes = await fetch('/dashboard_stats');
-                const stats = await sRes.json();
-                globalStats = stats;
+                if (sRes.ok) {
+                    const stats = await sRes.json();
+                    globalStats = stats;
 
-                // Update Voice Indicator
-                const indicator = document.getElementById('voice-indicator');
-                const indicatorText = document.getElementById('voice-status-text');
-                const indicatorDot = document.getElementById('voice-status-dot');
+                    // Update Voice Indicator
+                    const indicatorText = document.getElementById('voice-status-text');
+                    const indicatorDot = document.getElementById('voice-status-dot');
 
-                if (stats.voice_active) {
-                    indicatorDot.style.background = '#10b981'; // Green
-                    indicatorDot.style.boxShadow = '0 0 10px #10b981';
-                    indicatorText.innerText = 'Voice Active';
-                    indicatorText.style.color = '#1e293b';
-                } else {
-                    indicatorDot.style.background = '#94a3b8'; // Grey
-                    indicatorDot.style.boxShadow = 'none';
-                    indicatorText.innerText = 'Voice Offline';
-                    indicatorText.style.color = '#94a3b8';
-                }
-
-                // Update Metrics
-                document.querySelector('.metric-value').innerText = "₹" + stats.today_revenue;
-                document.getElementById('dashboard-low-stock').innerText = stats.low_stock_count;
-                document.getElementById('dashboard-pending').innerText = stats.pending_count;
-
-                // Update Sidebar Badge
-                const navBadge = document.getElementById('nav-orders-badge');
-                if (stats.pending_count > 0) {
-                    navBadge.style.display = 'inline-block';
-                    navBadge.innerText = stats.pending_count;
-                } else {
-                    navBadge.style.display = 'none';
-                }
-
-                // Render Orders List (View 3)
-                const qRes = await fetch('/pending_confirmations');
-                const qData = await qRes.json();
-                const ordersList = document.getElementById('orders-list');
-
-                if (stats.pending_count > 0 && qData.pending) {
-                    ordersList.innerHTML = '';
-                    qData.pending.forEach(order => {
-                        let text = order.original_text;
-                        let id = order.id;
-                        let nlu = order.nlu_result;
-                        let details = nlu.action + " " + nlu.quantity + " " + nlu.product;
-
-                        ordersList.innerHTML += `
-                            <div class="queue-item">
-                                <div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.3rem;">"${text}"</div>
-                                    <div style="color: var(--text-muted); font-size: 0.9rem;">${details}</div>
-                                </div>
-                                <div style="display: flex; gap: 10px;">
-                                    <button class="btn btn-success" onclick="approveTx(${id})">Approve</button>
-                                    <button class="btn btn-danger" onclick="rejectTx(${id})">Reject</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                } else {
-                    ordersList.innerHTML = `<div style="text-align: center; padding: 4rem; color: var(--text-muted);">
-                        <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
-                        All caught up! No pending orders.
-                    </div>`;
-                }
-
-                // Fetch Inventory
-                const iRes = await fetch('/inventory');
-                const iData = await iRes.json();
-                let products = iData.products || iData;
-                let enNames = iData.english_names || {};
-
-                const tbody = document.getElementById('inventory-tbody');
-                tbody.innerHTML = ''; // clear
-
-                for (let [key, val] of Object.entries(products)) {
-                    let name = enNames[key] || key;
-                    name = name.charAt(0).toUpperCase() + name.slice(1);
-
-                    let stock = val.current_stock;
-                    let thresh = val.threshold;
-                    let price = val.price || 0; // Price
-
-                    let statusHtml = '';
-                    let forecastHtml = 'Stable';
-
-                    if (stock <= thresh) {
-                        statusHtml = `<span class="status-chip chip-danger">Critical</span>`;
-                        forecastHtml = `<span style="color:#ef4444; font-weight:600;">Refill ASAP</span>`;
-                    } else if (stock <= thresh * 1.5) {
-                        statusHtml = `<span class="status-chip chip-warning">Low</span>`;
+                    if (stats.voice_active) {
+                        indicatorDot.style.background = '#10b981';
+                        indicatorDot.style.boxShadow = '0 0 10px #10b981';
+                        indicatorText.innerText = 'Voice Active';
+                        indicatorText.style.color = '#1e293b';
                     } else {
-                        statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
-                        forecastHtml = `<span style="color:#64748b;">Good</span>`;
+                        indicatorDot.style.background = '#94a3b8';
+                        indicatorDot.style.boxShadow = 'none';
+                        indicatorText.innerText = 'Voice Offline';
+                        indicatorText.style.color = '#94a3b8';
                     }
 
-                    tbody.innerHTML += `
-                        <tr>
-                            <td style="font-weight:600;">${name}</td>
-                            <td>${stock}</td>
-                            <td style="color:#64748b;">${val.unit}</td>
-                            <td>
-                                <input type="number" id="price-input-${key}" class="price-input" value="${inputValue}" 
-                                    onchange="updatePrice('${key}', this.value)" 
-                                    onkeypress="if(event.key === 'Enter') this.blur()"
-                                />
-                            </td>
-                            <td>${statusHtml}</td>
-                            <td>${forecastHtml}</td>
-                        </tr>
-                    `;
+                    // Update Metrics
+                    document.querySelector('.metric-value').innerText = "₹" + (stats.today_revenue || 0);
+                    document.getElementById('dashboard-low-stock').innerText = stats.low_stock_count || 0;
+                    document.getElementById('dashboard-pending').innerText = stats.pending_count || 0;
+
+                    // Update Sidebar Badge
+                    const navBadge = document.getElementById('nav-orders-badge');
+                    if (stats.pending_count > 0) {
+                        navBadge.style.display = 'inline-block';
+                        navBadge.innerText = stats.pending_count;
+                    } else {
+                        navBadge.style.display = 'none';
+                    }
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error("Stats fetch failed:", e);
+            }
+
+            try {
+                // Render Orders List (View 3)
+                const qRes = await fetch('/pending_confirmations');
+                if (qRes.ok) {
+                    const qData = await qRes.json();
+                    const ordersList = document.getElementById('orders-list');
+
+                    if (qData.pending && qData.pending.length > 0) {
+                        ordersList.innerHTML = '';
+                        qData.pending.forEach(order => {
+                            let text = order.original_text;
+                            let id = order.id;
+                            let nlu = order.nlu_result || {};
+                            let details = (nlu.action || '') + " " + (nlu.quantity || '') + " " + (nlu.product || '');
+
+                            ordersList.innerHTML += `
+                                <div class="queue-item">
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.3rem;">"${text}"</div>
+                                        <div style="color: var(--text-muted); font-size: 0.9rem;">${details}</div>
+                                    </div>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button class="btn btn-success" onclick="approveTx(${id})">Approve</button>
+                                        <button class="btn btn-danger" onclick="rejectTx(${id})">Reject</button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        ordersList.innerHTML = `<div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+                            <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
+                            All caught up! No pending orders.
+                        </div>`;
+                    }
+                }
+            } catch (e) {
+                console.error("Orders fetch failed:", e);
+            }
+
+            try {
+                // Fetch Inventory
+                const iRes = await fetch('/inventory');
+                if (iRes.ok) {
+                    const iData = await iRes.json();
+                    let products = iData.products || {};
+                    let enNames = iData.english_names || {};
+
+                    const tbody = document.getElementById('inventory-tbody');
+                    tbody.innerHTML = ''; // clear
+
+                    const entries = Object.entries(products);
+                    if (entries.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No products found in database.</td></tr>';
+                    } else {
+                        for (let [key, val] of entries) {
+                            let name = enNames[key] || val.name || key;
+                            name = name.charAt(0).toUpperCase() + name.slice(1);
+
+                            let stock = val.current_stock || 0;
+                            let thresh = val.threshold || 0;
+                            let price = val.price || 0;
+
+                            let statusHtml = '';
+                            let forecastHtml = 'Stable';
+
+                            if (stock <= thresh) {
+                                statusHtml = `<span class="status-chip chip-danger">Critical</span>`;
+                                forecastHtml = `<span style="color:#ef4444; font-weight:600;">Refill ASAP</span>`;
+                            } else if (stock <= thresh * 1.5) {
+                                statusHtml = `<span class="status-chip chip-warning">Low</span>`;
+                            } else {
+                                statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
+                                forecastHtml = `<span style="color:#64748b;">Good</span>`;
+                            }
+
+                            let inputValue = price === 0 ? '' : price;
+
+                            tbody.innerHTML += `
+                                <tr>
+                                    <td style="font-weight:600;">${name}</td>
+                                    <td>${stock}</td>
+                                    <td style="color:#64748b;">${val.unit || 'unit'}</td>
+                                    <td>
+                                        <input type="number" id="price-input-${key}" class="price-input" value="${inputValue}" 
+                                            onchange="updatePrice('${key}', this.value)" 
+                                            onkeypress="if(event.key === 'Enter') this.blur()"
+                                        />
+                                    </td>
+                                    <td>${statusHtml}</td>
+                                    <td>${forecastHtml}</td>
+                                </tr>
+                            `;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Inventory fetch failed:", e);
+                document.getElementById('inventory-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding: 2rem;">Error loading data. Please refresh.</td></tr>';
+            }
         }
 
         // --- Actions ---

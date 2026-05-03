@@ -1,0 +1,68 @@
+<!-- BULK RESTOCK HISTORY -->
+<div class="glass-card" style="margin-top: 2rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+        <h3>📦 Recent Bulk Restocks</h3>
+        <button class="btn" style="background:#f1f5f9;" onclick="loadBulkHistory()">🔄 Refresh</button>
+    </div>
+    <div id="bulk-history-container">
+        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+            <i class="ri-inbox-line" style="font-size: 2.5rem; margin-bottom: 1rem; display: block;"></i>
+            No bulk restock sessions yet.
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript for Bulk History -->
+<script>
+    async function loadBulkHistory() {
+        try {
+            const res = await fetch('/bulk_restock_history');
+            const data = await res.json();
+            const container = document.getElementById('bulk-history-container');
+
+            if (data.history && data.history.length > 0) {
+                container.innerHTML = '';
+                data.history.forEach(session => {
+                    const itemsList = session.items_list.map(item => `<li>${item}</li>`).join('');
+                    container.innerHTML += `
+                    <div class="glass-card" style="margin-bottom: 1rem; padding: 1.5rem; background: rgba(255,255,255,0.5);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                            <div>
+                                <div style="font-weight: 700; font-size: 1.1rem; color: #1e293b;">
+                                    📅 ${session.date} at ${session.time}
+                                </div>
+                                <div style="color: #64748b; font-size: 0.9rem; margin-top: 0.3rem;">
+                                    ${session.items_count} items added
+                                </div>
+                            </div>
+                            <div style="background: #10b981; color: white; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                                Completed
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.7); padding: 1rem; border-radius: 8px;">
+                            <div style="font-weight: 600; margin-bottom: 0.5rem; color: #475569;">Items:</div>
+                            <ul style="margin: 0; padding-left: 1.5rem; color: #64748b;">
+                                ${itemsList}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                });
+            } else {
+                container.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                    <i class="ri-inbox-line" style="font-size: 2.5rem; margin-bottom: 1rem; display: block;"></i>
+                    No bulk restock sessions yet.
+                </div>
+            `;
+            }
+        } catch (e) {
+            console.error('Failed to load bulk history:', e);
+        }
+    }
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadBulkHistory();
+    });
+</script>
