@@ -8,9 +8,24 @@ import speech_recognition as sr
 import difflib
 from difflib import SequenceMatcher
 import urllib.parse
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import psycopg2
 from dotenv import load_dotenv
+import hashlib, secrets
+import requests as http_requests
+import random
+
+# Chat system imports
+from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect as ws_disconnect
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+import jwt as pyjwt
+from chat_crypto import (
+    generate_conversation_key,
+    encrypt_key, decrypt_key,
+    encrypt_message, decrypt_message,
+)
 
 load_dotenv()
 
@@ -18,14 +33,207 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "quickstock_premium_secret_2026")
 
+# JWT Configuration
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=8)
+jwt_manager = JWTManager(app)
+
+# Rate Limiter
+limiter = Limiter(key_func=get_remote_address, app=app,
+                  default_limits=["200 per minute"])
+
+# Flask-SocketIO
+socketio = SocketIO(
+    app,
+    async_mode="eventlet",
+    cors_allowed_origins="*",
+    ping_timeout=60,
+    ping_interval=25,
+    max_http_buffer_size=1_000_000,
+)
+
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
 
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
 # User Credentials with Roles
 USERS = {
-    "admin": {"password": "quickstock2026", "role": "admin"},
-    "shop_shrey": {"password": "shrey2026", "role": "shop"}
+    "admin": {"password": hash_password("quickstock2026"), "role": "admin"},
+    "shop_shrey": {"password": hash_password("shrey2026"), "role": "shop"}
 }
+
+def generate_otp() -> str:
+    return str(random.randint(100000, 999999))
+
+def send_otp_fast2sms(phone: str, otp: str) -> bool:
+    """Send OTP via Fast2SMS free DLT route."""
+    api_key = os.getenv('FAST2SMS_API_KEY')
+    if not api_key:
+        print("FAST2SMS_API_KEY not found in .env")
+        return False
+    url = "https://www.fast2sms.com/dev/bulkV2"
+    payload = {
+        "route": "q",
+        "message": f"Your QuickStock OTP is {otp}. Valid for 10 minutes. Do not share.",
+        "language": "english",
+        "flash": 0,
+        "numbers": phone,
+    }
+    headers = {"authorization": api_key, "Content-Type": "application/json"}
+    try:
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=8)
+        data = resp.json()
+        return data.get("return") == True
+    except Exception as e:
+        print(f"OTP send failed: {e}")
+        return False
+
+def save_otp_to_db(phone: str, otp: str, purpose: str = 'login'):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    expires = datetime.utcnow() + timedelta(minutes=10)
+    cur.execute("""
+        INSERT INTO otp_log (phone, otp_code, purpose, expires_at)
+        VALUES (%s, %s, %s, %s)
+    """, (phone, otp, purpose, expires))
+    conn.commit()
+    cur.close(); conn.close()
+
+def verify_otp_from_db(phone: str, otp: str) -> bool:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id FROM otp_log
+        WHERE phone = %s AND otp_code = %s
+          AND used = FALSE AND expires_at > NOW()
+        ORDER BY created_at DESC LIMIT 1
+    """, (phone, otp))
+    row = cur.fetchone()
+    if row:
+        cur.execute("UPDATE otp_log SET used = TRUE WHERE id = %s", (row[0],))
+        conn.commit()
+    cur.close(); conn.close()
+    return row is not None
+
+def get_nearby_shops(shop_id: int, radius_km: float = 2.0) -> list:
+    """Find all shops within radius_km of the given shop."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT s2.id, s2.shop_name, s2.owner_name,
+               ROUND(ST_Distance(
+                   s1.geom::geography,
+                   s2.geom::geography
+               ) / 1000.0, 2) AS distance_km,
+               s2.latitude, s2.longitude
+        FROM shops s1
+        JOIN shops s2 ON s1.id != s2.id
+        WHERE s1.id = %s
+          AND s2.geom IS NOT NULL
+          AND ST_DWithin(
+              s1.geom::geography,
+              s2.geom::geography,
+              %s * 1000      -- convert km to metres
+          )
+        ORDER BY distance_km
+    """, (shop_id, radius_km))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [{'id': r[0], 'shop_name': r[1], 'owner': r[2], 'distance_km': r[3], 'latitude': r[4], 'longitude': r[5]} for r in rows]
+
+def get_product_sales_trend(shop_id: int, days: int = 30) -> list:
+    """Daily sales totals for the past N days."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT DATE(b.created_at) AS sale_date,
+               SUM(b.total)       AS daily_total,
+               COUNT(b.id)        AS bill_count
+        FROM bills b
+        WHERE b.shop_id = %s
+          AND b.created_at >= NOW() - INTERVAL '1 day' * %s
+        GROUP BY sale_date
+        ORDER BY sale_date
+    """, (shop_id, days))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [{'date': str(r[0]), 'total': float(r[1]), 'bills': r[2]} for r in rows]
+
+def get_top_selling_products(shop_id: int, limit: int = 10) -> list:
+    """Top products by revenue for the current month."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT bi.product_name,
+               SUM(bi.quantity)   AS total_qty,
+               SUM(bi.line_total) AS total_revenue
+        FROM bill_items bi
+        JOIN bills b ON bi.bill_id = b.id
+        WHERE b.shop_id = %s
+          AND DATE_TRUNC('month', b.created_at) = DATE_TRUNC('month', NOW())
+        GROUP BY bi.product_name
+        ORDER BY total_revenue DESC
+        LIMIT %s
+    """, (shop_id, limit))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [{'product': r[0], 'qty': float(r[1]), 'revenue': float(r[2])} for r in rows]
+
+WHATSAPP_API_URL = "https://graph.facebook.com/v19.0/{phone_id}/messages"
+
+def send_whatsapp_message(to_number: str, message: str) -> bool:
+    """Send a free-form WhatsApp message (only works within 24hr window)."""
+    phone_id = os.getenv('WHATSAPP_PHONE_ID')
+    token    = os.getenv('WHATSAPP_TOKEN')
+    if not phone_id or not token:
+        print("WhatsApp credentials missing in .env")
+        return False
+    url      = WHATSAPP_API_URL.format(phone_id=phone_id)
+    payload  = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "text",
+        "text": {"body": message}
+    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=10)
+        return resp.status_code == 200
+    except Exception as e:
+        print(f"WhatsApp send failed: {e}")
+        return False
+
+def send_whatsapp_template(to_number: str, template_name: str, params: list) -> bool:
+    """Send an approved WhatsApp template message (works anytime)."""
+    phone_id = os.getenv('WHATSAPP_PHONE_ID')
+    token    = os.getenv('WHATSAPP_TOKEN')
+    if not phone_id or not token:
+        print("WhatsApp credentials missing in .env")
+        return False
+    url      = WHATSAPP_API_URL.format(phone_id=phone_id)
+    components = [{
+        "type": "body",
+        "parameters": [{"type": "text", "text": p} for p in params]
+    }]
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": "en"},
+            "components": components
+        }
+    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=10)
+        return resp.status_code == 200
+    except Exception as e:
+        print(f"WhatsApp template send failed: {e}")
+        return False
 
 def login_required(f):
     from functools import wraps
@@ -47,23 +255,111 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        data = request.form
+        username   = data.get('username', '').strip()
+        password   = data.get('password', '').strip()
+        shop_name  = data.get('shop_name', '').strip()
+        phone      = data.get('phone', '').strip()
+        address    = data.get('address', '').strip()
+        city       = data.get('city', '').strip()
+        pin_code   = data.get('pin_code', '').strip()
+        lat        = data.get('latitude') or None
+        lng        = data.get('longitude') or None
+
+        if not all([username, password, shop_name, phone]):
+            return render_template('register_template.html', error='All fields required')
+
+        try:
+            conn = get_db_connection()
+            cur  = conn.cursor()
+            cur.execute("""
+                INSERT INTO shops
+                  (username, password_hash, shop_name, phone, address, city, pin_code, latitude, longitude)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (username, hash_password(password), shop_name, phone,
+                  address, city, pin_code, lat, lng))
+            conn.commit()
+            cur.close(); conn.close()
+            return redirect(url_for('login'))
+        except Exception as e:
+            return render_template('register_template.html', error=f'Username or phone already exists.')
+
+    return render_template('register_template.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user_data = USERS.get(username)
-        if user_data and user_data['password'] == password:
-            session['user'] = username
-            session['role'] = user_data['role']
-            # Redirect based on role
-            if user_data['role'] == 'admin':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT id, username, password_hash, role, shop_name FROM shops WHERE username = %s",
+            (username,)
+        )
+        row = cur.fetchone()
+        cur.close(); conn.close()
+
+        if row and row[2] == hash_password(password):
+            session['user']    = row[1]
+            session['user_id'] = row[0]
+            session['role']    = row[3]
+            session['shop']    = row[4]
+            if row[3] == 'admin':
                 return redirect(url_for('admin_panel'))
             return redirect(url_for('dashboard'))
         else:
-            flash('Invalid Credentials', 'danger')
+            flash('Invalid credentials')
     return render_template('login_template.html')
+
+@app.route('/login/otp/send', methods=['POST'])
+def send_login_otp():
+    phone = request.form.get('phone', '').strip()
+    conn  = get_db_connection()
+    cur   = conn.cursor()
+    cur.execute("SELECT id, username, role, shop_name FROM shops WHERE phone = %s", (phone,))
+    shop  = cur.fetchone()
+    cur.close(); conn.close()
+
+    if not shop:
+        flash('Phone number not registered.')
+        return redirect(url_for('login'))
+
+    otp = generate_otp()
+    save_otp_to_db(phone, otp, 'login')
+    success = send_otp_fast2sms(phone, otp)
+    if not success:
+        flash('Could not send OTP. Try password login.')
+        return redirect(url_for('login'))
+
+    session['otp_phone'] = phone
+    return render_template('otp_verify_template.html', phone=phone)
+
+@app.route('/login/otp/verify', methods=['POST'])
+def verify_login_otp():
+    phone    = session.get('otp_phone')
+    otp_code = request.form.get('otp', '').strip()
+
+    if not phone or not verify_otp_from_db(phone, otp_code):
+        flash('Invalid or expired OTP.')
+        return render_template('otp_verify_template.html', phone=phone, error=True)
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("SELECT id, username, role, shop_name FROM shops WHERE phone = %s", (phone,))
+    row  = cur.fetchone()
+    cur.close(); conn.close()
+
+    session['user']    = row[1]
+    session['user_id'] = row[0]
+    session['role']    = row[2]
+    session['shop']    = row[3]
+    session.pop('otp_phone', None)
+    return redirect(url_for('dashboard'))
 
 @app.route('/logout')
 def logout():
@@ -74,6 +370,8 @@ def logout():
 @app.route('/')
 @login_required
 def dashboard():
+    if session.get('role') == 'wholesaler':
+        return render_template('wholesaler_dashboard_template.html')
     return render_template('dashboard_template.html')
 
 def get_all_products_db():
@@ -105,6 +403,15 @@ def update_product_stock_in_db(product_name, new_stock, new_threshold=None, new_
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Get current threshold if not provided
+        if new_threshold is None:
+            cur.execute("SELECT threshold FROM products WHERE name = %s", (product_name,))
+            row = cur.fetchone()
+            current_threshold = float(row[0]) if row and row[0] is not None else 0.0
+        else:
+            current_threshold = new_threshold
+
         updates = ["current_stock = %s"]
         params = [new_stock]
         
@@ -121,10 +428,16 @@ def update_product_stock_in_db(product_name, new_stock, new_threshold=None, new_
         query = f"UPDATE products SET {', '.join(updates)} WHERE name = %s"
         cur.execute(query, tuple(params))
         conn.commit()
+
+        # --- Low-Stock Detection (Return True if low) ---
+        is_low = new_stock <= current_threshold
+        
         cur.close()
         conn.close()
+        return is_low
     except Exception as e:
         print(f"Error updating product DB: {e}")
+        return False
 
 def create_product_in_db(product_name, stock, threshold, unit, base_unit, price):
     try:
@@ -1140,7 +1453,29 @@ def process_text_command(text, apply=True):
     """Processes the transcribed text and performs inventory actions."""
     text = preprocess_text(text)
     print(f"Processing command: '{text}'")
-    
+
+    # --- Billing Keywords Detection ---
+    billing_keywords = ['bill banao', 'bill do', 'receipt do', 'bill bana do', 'invoice']
+    if any(kw in text.lower() for kw in billing_keywords):
+        current_products = get_all_products_db()
+        items_parsed = parse_multiple_products(text)
+        if items_parsed:
+            bill_items_payload = []
+            for qty, product_key, unit in items_parsed:
+                product = current_products.get(product_key, {})
+                bill_items_payload.append({
+                    'product': product_key,
+                    'qty': qty,
+                    'unit': unit,
+                    'price': product.get('price', 0)
+                })
+            return {
+                'action': 'bill_ready',
+                'items': bill_items_payload,
+                'message': f'📄 Bill ready with {len(bill_items_payload)} items. Confirm?',
+                'pending_bill': True
+            }
+
     # First, try to parse multiple products
     multiple_products = parse_multiple_products(text)
     
@@ -1201,7 +1536,7 @@ def process_text_command(text, apply=True):
                 # SMART THRESHOLD: Update to 20% of new stock
                 new_threshold = max(1, int(new_stock * 0.2))
                 
-                update_product_stock_in_db(product_key, new_stock, new_threshold=new_threshold)
+                is_low = update_product_stock_in_db(product_key, new_stock, new_threshold=new_threshold)
                 log_transaction_in_db('restock', product_key, quantity, display_unit, old_stock=old_stock, new_stock=new_stock)
                 
                 print(f"RESTOCKED: {quantity} {display_unit} {product_key}. New stock: {new_stock} {current_products[product_key]['unit']}")
@@ -1213,6 +1548,7 @@ def process_text_command(text, apply=True):
                 'unit': display_unit,
                 'old_stock': old_stock,
                 'new_stock': new_stock,
+                'low_stock': is_low if apply else False,
                 'message': f"Restock {quantity} {display_unit} {product_key} → {new_stock} {current_products[product_key]['unit']}"
             }
 
@@ -1233,6 +1569,7 @@ def process_text_command(text, apply=True):
                     'unit': display_unit,
                     'old_stock': old_stock,
                     'new_stock': new_stock,
+                    'low_stock': is_low if apply else False,
                     'message': f"Sell {quantity} {display_unit} {product_key} → {new_stock} {current_products[product_key]['unit']}"
                 }
             else:
@@ -1616,14 +1953,32 @@ def set_voice_status():
     return jsonify({'error': 'Missing status'}), 400
 
 @app.route('/update_price', methods=['POST'])
+@login_required
 def update_price():
     """Update the price of a product."""
     data = request.get_json()
-    product_name = data.get('product')
+    product_name = data.get('product') or data.get('name')
     new_price = data.get('price')
 
     if not product_name or new_price is None:
         return jsonify({'error': 'Missing product or price'}), 400
+
+@app.route('/update_stock', methods=['POST'])
+@login_required
+def update_stock():
+    """Update the stock of a product manually."""
+    data = request.get_json()
+    product_name = data.get('product') or data.get('name')
+    new_stock = data.get('stock')
+
+    if not product_name or new_stock is None:
+        return jsonify({'error': 'Missing product or stock'}), 400
+    
+    try:
+        is_low = update_product_stock_in_db(product_name, float(new_stock))
+        return jsonify({'success': True, 'low_stock': is_low})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
     current_products = get_all_products_db()
 
@@ -1760,12 +2115,12 @@ def manual_entry():
     
     if action_type == 'restock':
         new_stock = old_stock + quantity
-        update_product_stock_in_db(product_key, new_stock)
+        is_low = update_product_stock_in_db(product_key, new_stock)
     else:  # sale
         if old_stock < quantity:
             return jsonify({'error': f'Insufficient stock. Only {old_stock} {unit} available'}), 400
         new_stock = old_stock - quantity
-        update_product_stock_in_db(product_key, new_stock)
+        is_low = update_product_stock_in_db(product_key, new_stock)
     
     # Log transaction
     log_transaction_in_db(action_type, product_key, quantity, unit, old_stock=old_stock, new_stock=new_stock)
@@ -1783,7 +2138,8 @@ def manual_entry():
     return jsonify({
         'success': True,
         'transaction': transaction,
-        'inventory': get_all_products_db()
+        'inventory': get_all_products_db(),
+        'low_stock': is_low
     })
 
 @app.route('/transaction_history', methods=['GET'])
@@ -2315,9 +2671,14 @@ def notifications():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        # Fetch items with stock <= threshold OR hardcoded 3 as requested by user
-        cur.execute("SELECT name, current_stock, threshold, unit, price FROM products WHERE current_stock <= 3")
+        # Fetch items where current stock is less than or equal to their threshold
+        cur.execute("SELECT name, current_stock, threshold, unit, price FROM products WHERE current_stock <= threshold")
         rows = cur.fetchall()
+        
+        # Fetch all products for the dropdown
+        cur.execute("SELECT name FROM products ORDER BY name ASC")
+        all_products = [r[0] for r in cur.fetchall()]
+        
         cur.close()
         conn.close()
         
@@ -2330,10 +2691,11 @@ def notifications():
                 "unit": r[3],
                 "price": r[4]
             })
-        return render_template('notifications_template.html', items=low_stock_items)
+        
+        return render_template('notifications_template.html', items=low_stock_items, all_products=all_products)
     except Exception as e:
         print(f"Error fetching notifications: {e}")
-        return render_template('notifications_template.html', items=[])
+        return render_template('notifications_template.html', items=[], all_products=[])
 
 @app.route('/market-trends')
 @login_required
@@ -2368,29 +2730,1062 @@ def admin_panel():
                           online_count=online_count,
                           total_shops=len(shops))
 
+def send_sms_fast2sms(phone: str, message: str) -> bool:
+    """Send a general SMS via Fast2SMS."""
+    api_key = os.getenv('FAST2SMS_API_KEY')
+    if not api_key:
+        print("FAST2SMS_API_KEY not found in .env")
+        return False
+    url = "https://www.fast2sms.com/dev/bulkV2"
+    payload = {
+        "route": "q",
+        "message": message,
+        "language": "english",
+        "flash": 0,
+        "numbers": phone,
+    }
+    headers = {"authorization": api_key, "Content-Type": "application/json"}
+    try:
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=8)
+        data = resp.json()
+        return data.get("return") == True
+    except Exception as e:
+        print(f"SMS send failed: {e}")
+        return False
+
 @app.route('/order_distributor', methods=['POST'])
 @login_required
 def order_distributor():
     data = request.json
-    item = data.get('item')
-    # Mocking order placement
-    print(f"ORDER PLACED for {item} to Distributor")
-    return jsonify({"success": True, "message": f"Order for {item} successfully sent to distributor!"})
+    items = data.get('items', []) # List or Dict
+    extra_text = data.get('extra_text', '')
+    
+    if not items and not extra_text:
+        return jsonify({"success": False, "message": "No items or text provided."}), 400
+
+    shop_user_id = session.get('user_id')
+    if not shop_user_id:
+        return jsonify({"success": False, "message": "Not authenticated."}), 401
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Find a linked wholesaler or fallback to the first one available
+    cur.execute("SELECT id FROM shops WHERE role = 'wholesaler' LIMIT 1")
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not row:
+        return jsonify({"success": False, "message": "No wholesaler found to send order to."}), 404
+        
+    wholesaler_id = row[0]
+    
+    # Construct Message
+    if isinstance(items, dict):
+        items_list = [f"- {name} ({qty})" for name, qty in items.items()]
+        items_to_save = list(items.keys())
+    else:
+        items_list = [f"- {i}" for i in items]
+        items_to_save = items
+
+    items_str = "\n".join(items_list)
+    message = "📦 BULK RESTOCK ORDER\n\n"
+    if items:
+        message += f"Items Requested:\n{items_str}\n"
+    if extra_text:
+        message += f"\nNote: {extra_text}"
+        
+    try:
+        # Get/Create conversation and send message via chat system
+        conv_id = get_or_create_conversation(shop_user_id, wholesaler_id)
+        meta = save_chat_message(conv_id, shop_user_id, message, message_type="order_suggestion")
+        
+        # Create orders row for Wholesaler dashboard
+        try:
+            conn2 = get_db_connection()
+            cur2 = conn2.cursor()
+            cur2.execute(
+                """INSERT INTO orders
+                    (conversation_id, message_id, shop_user_id, wholesaler_user_id,
+                    product_name, requested_qty, unit, status, wholesaler_note, items_json)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s)""",
+                (conv_id, meta['id'], shop_user_id, wholesaler_id,
+                "Bulk Order", len(items_to_save), "items", extra_text, json.dumps(items if isinstance(items, dict) else items_to_save))
+            )
+            conn2.commit()
+            cur2.close(); conn2.close()
+        except Exception as e2:
+            print(f"Error creating order row: {e2}")
+            
+        # Broadcast the message in real-time
+        room = f"conv_{conv_id}"
+        socketio.emit("new_message", {
+            "id":              meta["id"],
+            "conversation_id": conv_id,
+            "sender_id":       shop_user_id,
+            "sender_name":     session.get('user', 'QuickStock Store'),
+            "text":            message,
+            "message_type":    "order_suggestion",
+            "created_at":      meta["created_at"],
+        }, to=room)
+        
+        # Notify wholesaler's personal room (for dashboard alert)
+        wholesaler_room = f"user_{wholesaler_id}"
+        socketio.emit('new_order_alert', {
+            'shop_name':    session.get('shop', 'A Shop'),
+            'product_name': 'Bulk Restock Order',
+            'suggested_qty': len(items_to_save),
+            'unit':         'items',
+        }, to=wholesaler_room)
+        
+        return jsonify({"success": True, "message": "Order successfully sent via Chat!"})
+    except Exception as e:
+        print(f"Chat order failed: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ── Chat DB Helpers ──────────────────────────────────────────────
+
+def get_or_create_conversation(shop_user_id: int, wholesaler_user_id: int) -> int:
+    """Return existing conversation id or create a new one with a fresh AES key."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT id FROM conversations WHERE shop_user_id=%s AND wholesaler_user_id=%s",
+        (shop_user_id, wholesaler_user_id)
+    )
+    row = cur.fetchone()
+    if row:
+        cur.close(); conn.close()
+        return row[0]
+
+    # New conversation
+    cur.execute(
+        """INSERT INTO conversations (shop_user_id, wholesaler_user_id)
+           VALUES (%s, %s) RETURNING id""",
+        (shop_user_id, wholesaler_user_id)
+    )
+    conv_id = cur.fetchone()[0]
+
+    # Generate and store encrypted conversation key
+    raw_key     = generate_conversation_key()
+    key_payload = encrypt_key(raw_key)
+    cur.execute(
+        """INSERT INTO chat_keys (conversation_id, encrypted_key, key_iv, key_auth_tag)
+           VALUES (%s, %s, %s, %s)""",
+        (conv_id,
+         key_payload["encrypted_key"],
+         key_payload["key_iv"],
+         key_payload["key_auth_tag"])
+    )
+    conn.commit()
+    cur.close(); conn.close()
+    return conv_id
+
+
+def get_conversation_key(conversation_id: int) -> bytes:
+    """Fetch and decrypt the AES key for a given conversation."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT encrypted_key, key_iv, key_auth_tag FROM chat_keys WHERE conversation_id=%s",
+        (conversation_id,)
+    )
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row:
+        raise ValueError(f"No key found for conversation {conversation_id}")
+    return decrypt_key(row[0], row[1], row[2])
+
+
+def save_chat_message(conversation_id: int, sender_id: int,
+                 plaintext: str, message_type: str = "text") -> dict:
+    """Encrypt and persist a message; update conversation timestamp."""
+    key     = get_conversation_key(conversation_id)
+    payload = encrypt_message(plaintext, key)
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """INSERT INTO messages
+               (conversation_id, sender_id, encrypted_body, iv, auth_tag, message_type)
+           VALUES (%s, %s, %s, %s, %s, %s)
+           RETURNING id, created_at""",
+        (conversation_id, sender_id,
+         payload["encrypted_body"], payload["iv"], payload["auth_tag"],
+         message_type)
+    )
+    msg_id, created_at = cur.fetchone()
+    cur.execute(
+        "UPDATE conversations SET last_message_at=NOW() WHERE id=%s",
+        (conversation_id,)
+    )
+    conn.commit()
+    cur.close(); conn.close()
+    return {"id": msg_id, "created_at": str(created_at)}
+
+
+def load_chat_messages(conversation_id: int, limit: int = 50, offset: int = 0) -> list:
+    """Load and decrypt the most recent messages from a conversation."""
+    key  = get_conversation_key(conversation_id)
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """SELECT m.id, m.sender_id, m.encrypted_body, m.iv, m.auth_tag,
+                  m.message_type, m.is_read, m.created_at, s.username, s.shop_name,
+                  o.id AS order_id
+           FROM messages m
+           JOIN shops s ON s.id = m.sender_id
+           LEFT JOIN orders o ON o.message_id = m.id
+           WHERE m.conversation_id = %s
+           ORDER BY m.created_at DESC
+           LIMIT %s OFFSET %s""",
+        (conversation_id, limit, offset)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+
+    messages = []
+    for r in rows:
+        try:
+            plaintext = decrypt_message(r[2], r[3], r[4], key)
+        except Exception:
+            plaintext = "[encrypted — decryption failed]"
+        messages.append({
+            "id":           r[0],
+            "sender_id":    r[1],
+            "text":         plaintext,
+            "message_type": r[5],
+            "is_read":      r[6],
+            "created_at":   str(r[7]),
+            "username":     r[8],
+            "display_name": r[9] or r[8],
+            "order_id":     r[10]
+        })
+    return list(reversed(messages))   # Chronological order
+
+
+def get_user_conversations(user_id: int, role: str) -> list:
+    """List all conversations for a user with unread counts."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    if role == "shop":
+        query = """
+            SELECT c.id, s.id, s.username, s.shop_name, s.shop_name,
+                   c.last_message_at,
+                   (SELECT COUNT(*) FROM messages m
+                    WHERE m.conversation_id = c.id
+                    AND m.sender_id != %s AND m.is_read = FALSE) AS unread
+            FROM conversations c
+            JOIN shops s ON s.id = c.wholesaler_user_id
+            WHERE c.shop_user_id = %s
+            ORDER BY c.last_message_at DESC
+        """
+    else:  # wholesaler
+        query = """
+            SELECT c.id, s.id, s.username, s.shop_name, s.shop_name,
+                   c.last_message_at,
+                   (SELECT COUNT(*) FROM messages m
+                    WHERE m.conversation_id = c.id
+                    AND m.sender_id != %s AND m.is_read = FALSE) AS unread
+            FROM conversations c
+            JOIN shops s ON s.id = c.shop_user_id
+            WHERE c.wholesaler_user_id = %s
+            ORDER BY c.last_message_at DESC
+        """
+    cur.execute(query, (user_id, user_id))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [
+        {
+            "conversation_id": r[0],
+            "other_user_id":   r[1],
+            "username":        r[2],
+            "display_name":    r[3] or r[2],
+            "shop_name":       r[4],
+            "last_message_at": str(r[5]),
+            "unread_count":    r[6],
+        }
+        for r in rows
+    ]
+
+
+@app.route('/api/send_order_suggestion', methods=['POST'])
+@login_required
+def api_send_order_suggestion():
+    """Manually send order suggestion to wholesaler."""
+    data = request.get_json()
+    product_name = data.get('product')
+    shop_user_id = session.get('user_id')
+    
+    if not product_name or not shop_user_id:
+        return jsonify({'error': 'Missing product or user'}), 400
+        
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT current_stock, threshold, unit FROM products WHERE name = %s", (product_name,))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        
+        if row:
+            curr, thresh, unit = row
+            send_order_suggestion(shop_user_id, product_name, float(curr), float(thresh), unit)
+            return jsonify({'success': True})
+        return jsonify({'error': 'Product not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def send_order_suggestion(shop_user_id: int, product_name: str,
+                           current_stock: float, threshold: float, unit: str):
+    """Auto-send order suggestion to wholesaler when stock drops below threshold."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT id, wholesaler_user_id FROM conversations WHERE shop_user_id=%s ORDER BY last_message_at DESC LIMIT 1",
+        (shop_user_id,)
+    )
+    row = cur.fetchone()
+    cur.close(); conn.close()
+
+    if not row:
+        print(f"[Chat] No wholesaler conversation found for shop_user_id={shop_user_id}")
+        return
+
+    conv_id = row[0]
+    suggested_qty = max(int(threshold * 3 - current_stock), int(threshold * 2))
+    message_text  = (
+        f"📦 LOW STOCK ALERT: {product_name}\n"
+        f"Current stock: {current_stock} {unit}\n"
+        f"Threshold: {threshold} {unit}\n"
+        f"Suggested order: {suggested_qty} {unit}\n"
+        f"Please confirm this order."
+    )
+    meta = save_chat_message(conv_id, shop_user_id, message_text, message_type="order_suggestion")
+    
+    # Create orders row for Wholesaler dashboard
+    try:
+        conn2 = get_db_connection()
+        cur2  = conn2.cursor()
+        cur2.execute(
+            """INSERT INTO orders
+                   (conversation_id, message_id, shop_user_id, wholesaler_user_id,
+                    product_name, requested_qty, unit, status)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')""",
+            (conv_id, meta["id"], shop_user_id, row[1],
+             product_name, suggested_qty, unit)
+        )
+        conn2.commit()
+        cur2.close()
+        conn2.close()
+    except Exception as e:
+        print(f"[Orders] Failed to create order row: {e}")
+
+    room = f"conv_{conv_id}"
+    socketio.emit("new_message", {
+        "conversation_id": conv_id,
+        "sender_id":       shop_user_id,
+        "text":            message_text,
+        "message_type":    "order_suggestion",
+    }, to=room)
+    print(f"[Chat] Order suggestion sent for {product_name} in conv {conv_id}")
+
+    # Notify wholesaler's personal room (for dashboard alert)
+    wholesaler_id = row[1]
+    wholesaler_room = f"user_{wholesaler_id}"
+    socketio.emit('new_order_alert', {
+        'shop_name':    session.get('display_name', 'A Shop'),
+        'product_name': product_name,
+        'suggested_qty': suggested_qty,
+        'unit':         unit,
+    }, to=wholesaler_room)
+
+
+# ── Chat REST Endpoints ──────────────────────────────────────────
+
+@app.route("/api/chat_token", methods=["POST"])
+@login_required
+def get_chat_token():
+    """Issue a JWT for WebSocket chat authentication."""
+    user_id   = session.get("user_id")
+    username  = session.get("user")
+    role      = session.get("role")
+    token = create_access_token(
+        identity=str(user_id),
+        additional_claims={"username": username, "role": role}
+    )
+    return jsonify({"token": token, "user_id": user_id})
+
+
+@app.route("/api/conversations", methods=["GET"])
+@login_required
+def api_get_conversations():
+    user_id = session.get("user_id")
+    role    = session.get("role")
+    convs   = get_user_conversations(user_id, role)
+    return jsonify({"conversations": convs})
+
+
+@app.route("/api/conversations/start", methods=["POST"])
+@login_required
+def api_start_conversation():
+    """Shopkeeper initiates a conversation with a wholesaler (or vice-versa)."""
+    data             = request.get_json()
+    other_user_id    = int(data.get("other_user_id", 0))
+    current_user_id  = session.get("user_id")
+    current_role     = session.get("role")
+
+    if not other_user_id:
+        return jsonify({"error": "other_user_id required"}), 400
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("SELECT id, role FROM shops WHERE id=%s", (other_user_id,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+
+    if not row:
+        return jsonify({"error": "User not found"}), 404
+
+    other_role = row[1]
+    valid_pairs = {("shop", "wholesaler"), ("wholesaler", "shop")}
+    if (current_role, other_role) not in valid_pairs:
+        return jsonify({"error": "Conversations only allowed between shop and wholesaler"}), 403
+
+    shop_id       = current_user_id if current_role == "shop" else other_user_id
+    wholesaler_id = current_user_id if current_role == "wholesaler" else other_user_id
+    conv_id       = get_or_create_conversation(shop_id, wholesaler_id)
+    return jsonify({"conversation_id": conv_id})
+
+
+@app.route("/api/conversations/<int:conv_id>/messages", methods=["GET"])
+@login_required
+def api_get_messages(conv_id):
+    user_id = session.get("user_id")
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT id FROM conversations WHERE id=%s AND (shop_user_id=%s OR wholesaler_user_id=%s)",
+        (conv_id, user_id, user_id)
+    )
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        return jsonify({"error": "Access denied"}), 403
+    cur.close(); conn.close()
+
+    limit  = min(int(request.args.get("limit", 50)), 100)
+    offset = int(request.args.get("offset", 0))
+    msgs   = load_chat_messages(conv_id, limit, offset)
+    return jsonify({"messages": msgs})
+
+
+@app.route("/api/wholesalers", methods=["GET"])
+@login_required
+def api_list_wholesalers():
+    """Returns available wholesalers for a shopkeeper to start a chat with."""
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT id, username, shop_name FROM shops WHERE role='wholesaler'"
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify({
+        "wholesalers": [
+            {"id": r[0], "username": r[1], "display_name": r[2] or r[1], "shop_name": r[2]}
+            for r in rows
+        ]
+    })
+
+
+# ── WebSocket Event Handlers ─────────────────────────────────────
+
+connected_users = {}   # sid -> {user_id, username, role}
+
+@socketio.on("connect")
+def on_connect():
+    token = request.args.get("token")
+    if not token:
+        ws_disconnect()
+        return False
+    try:
+        secret = app.config["JWT_SECRET_KEY"]
+        decoded = pyjwt.decode(token, secret, algorithms=["HS256"])
+        user_id  = int(decoded["sub"])
+        username = decoded["username"]
+        role     = decoded["role"]
+        connected_users[request.sid] = {
+            "user_id":  user_id,
+            "username": username,
+            "role":     role,
+        }
+        
+        # Join personal notification room
+        user_room = f"user_{user_id}"
+        join_room(user_room)
+        
+        print(f"[Chat] Connected: {username} ({role}) sid={request.sid} room={user_room}")
+    except pyjwt.ExpiredSignatureError:
+        ws_disconnect()
+        return False
+    except Exception as e:
+        print(f"[Chat] Auth error: {e}")
+        ws_disconnect()
+        return False
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    user_info = connected_users.pop(request.sid, None)
+    if user_info:
+        print(f"[Chat] Disconnected: {user_info['username']}")
+
+
+@socketio.on("join_conversation")
+def on_join_conversation(data):
+    """Client joins a SocketIO room for a specific conversation."""
+    user_info = connected_users.get(request.sid)
+    if not user_info:
+        emit("error", {"msg": "Not authenticated"})
+        return
+
+    conversation_id = int(data.get("conversation_id", 0))
+    if not conversation_id:
+        emit("error", {"msg": "conversation_id required"})
+        return
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """SELECT id FROM conversations
+           WHERE id=%s AND (shop_user_id=%s OR wholesaler_user_id=%s)""",
+        (conversation_id, user_info["user_id"], user_info["user_id"])
+    )
+    row = cur.fetchone()
+    cur.close(); conn.close()
+
+    if not row:
+        emit("error", {"msg": "Access denied"})
+        return
+
+    room = f"conv_{conversation_id}"
+    join_room(room)
+    emit("joined", {"conversation_id": conversation_id, "room": room})
+    print(f"[Chat] {user_info['username']} joined room {room}")
+
+
+@socketio.on("send_message")
+def on_send_message(data):
+    """Handle incoming chat message, encrypt, persist, broadcast."""
+    user_info = connected_users.get(request.sid)
+    if not user_info:
+        emit("error", {"msg": "Not authenticated"})
+        return
+
+    conversation_id = int(data.get("conversation_id", 0))
+    text = (data.get("text") or "").strip()
+    message_type = data.get("message_type", "text")
+
+    if not text or len(text) > 2000:
+        emit("error", {"msg": "Invalid message: empty or too long (max 2000 chars)"})
+        return
+    if message_type not in ("text", "order_suggestion", "system"):
+        message_type = "text"
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """SELECT id FROM conversations
+           WHERE id=%s AND (shop_user_id=%s OR wholesaler_user_id=%s)""",
+        (conversation_id, user_info["user_id"], user_info["user_id"])
+    )
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        emit("error", {"msg": "Access denied"})
+        return
+    cur.close(); conn.close()
+
+    meta = save_chat_message(conversation_id, user_info["user_id"], text, message_type)
+
+    payload = {
+        "id":              meta["id"],
+        "conversation_id": conversation_id,
+        "sender_id":       user_info["user_id"],
+        "sender_name":     user_info["username"],
+        "text":            text,
+        "message_type":    message_type,
+        "created_at":      meta["created_at"],
+    }
+    room = f"conv_{conversation_id}"
+    emit("new_message", payload, to=room)
+    print(f"[Chat] Message saved (conv={conversation_id}) from {user_info['username']}")
+
+
+@socketio.on("mark_read")
+def on_mark_read(data):
+    user_info = connected_users.get(request.sid)
+    if not user_info:
+        return
+    conversation_id = int(data.get("conversation_id", 0))
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """UPDATE messages SET is_read=TRUE
+           WHERE conversation_id=%s AND sender_id != %s AND is_read=FALSE""",
+        (conversation_id, user_info["user_id"])
+    )
+    conn.commit()
+    cur.close(); conn.close()
+
+
+# ── Wholesaler Dashboard API Routes ───────────────────────────────────
+
+@app.route('/api/wholesaler/orders', methods=['GET'])
+@login_required
+def api_wholesaler_orders():
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    wholesaler_id = session.get('user_id')
+    status_filter = request.args.get('status', None)
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    query = """
+        SELECT o.id, o.product_name, o.requested_qty, o.confirmed_qty,
+               o.unit, o.status, o.wholesaler_note, o.created_at,
+               u.shop_name, u.username, o.items_json
+        FROM orders o
+        JOIN shops u ON u.id = o.shop_user_id
+        WHERE o.wholesaler_user_id = %s
+    """
+    params = [wholesaler_id]
+    if status_filter:
+        query += " AND o.status = %s"
+        params.append(status_filter)
+    query += " ORDER BY o.created_at DESC"
+
+    cur.execute(query, tuple(params))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return jsonify({'orders': [
+        {
+            'id': r[0], 'product_name': r[1], 'requested_qty': r[2],
+            'confirmed_qty': r[3], 'unit': r[4], 'status': r[5],
+            'note': r[6], 'created_at': str(r[7]),
+            'shop_name': r[8] or r[9],
+            'items_json': r[10]
+        }
+        for r in rows
+    ]})
+
+
+@app.route('/api/wholesaler/orders/<int:order_id>/action', methods=['POST'])
+@login_required
+def api_wholesaler_order_action(order_id):
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    wholesaler_id = session.get('user_id')
+    data          = request.get_json()
+    action        = data.get('action')
+    confirmed_qty = data.get('confirmed_qty')
+    note          = data.get('note', '')
+
+    valid_actions = {'dispatch', 'reject'} # Wholesaler can only dispatch or reject
+    if action not in valid_actions:
+        return jsonify({'error': f'Invalid action. Must be one of {valid_actions}'}), 400
+
+    status_map = {'dispatch': 'dispatched', 'reject': 'rejected'}
+    new_status = status_map[action]
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        """UPDATE orders
+           SET status=%s, confirmed_qty=%s, wholesaler_note=%s, updated_at=NOW()
+           WHERE id=%s AND wholesaler_user_id=%s AND status='pending'
+           RETURNING shop_user_id, product_name, confirmed_qty""",
+        (new_status, confirmed_qty, note, order_id, wholesaler_id)
+    )
+    row = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if not row:
+        return jsonify({'error': 'Order not found, already processed, or access denied'}), 404
+
+    # Notify shopkeeper via chat if dispatch confirmed
+    if action == 'dispatch' and row:
+        shop_user_id = row[0]
+        conv_id = get_or_create_conversation(shop_user_id, wholesaler_id)
+        msg = (
+            f"📦 ORDER DISPATCHED: {row[1]}\n"
+            f"Quantity: {row[2]}\n"
+            f"Note: {note or 'On the way!'}"
+        )
+        # Use order_dispatch type so frontend can show a button
+        meta = save_chat_message(conv_id, wholesaler_id, msg, message_type='order_dispatch')
+        
+        # Link the message to the order so we can find the order_id later
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("UPDATE orders SET message_id=%s WHERE id=%s", (meta["id"], order_id))
+        conn.commit()
+        cur.close(); conn.close()
+
+        socketio.emit('new_message', {
+            'id': meta["id"],
+            'conversation_id': conv_id,
+            'sender_id': wholesaler_id,
+            'sender_name': session.get('user', 'Wholesaler'),
+            'text': msg,
+            'message_type': 'order_dispatch',
+            'order_id': order_id,
+            'created_at': meta["created_at"],
+        }, to=f'conv_{conv_id}')
+        
+        # Also notify shopkeeper via personal room
+        socketio.emit('new_order_alert', {
+            'shop_name': 'System',
+            'product_name': f'Order {order_id} Dispatched',
+            'status': 'dispatched'
+        }, to=f'user_{shop_user_id}')
+
+    return jsonify({'success': True, 'new_status': new_status})
+
+@app.route('/api/confirm-order-receipt', methods=['GET', 'POST'])
+@login_required
+def api_order_confirm_receipt():
+    # --- FIXED: properly extract orderid from any source ---
+    data = request.get_json(silent=True) or {}
+    orderid = (
+        request.args.get('orderid') or
+        request.args.get('order_id') or
+        data.get('orderid') or
+        data.get('order_id') or
+        request.form.get('orderid')
+    )
+
+    # DEBUG — remove after confirming it works
+    print(f"[DEBUG] confirm-receipt hit | method={request.method} | orderid={orderid} | raw_body={request.get_data(as_text=True)} | role={session.get('role')} | user={session.get('user')}")
+
+    if not orderid:
+        # Fallback: Find the latest dispatched order for this shopkeeper
+        conn_fb = get_db_connection()
+        cur_fb  = conn_fb.cursor()
+        cur_fb.execute(
+            """SELECT id FROM orders 
+               WHERE shop_user_id=%s AND status='dispatched' 
+               ORDER BY updated_at DESC LIMIT 1""",
+            (shopuserid,)
+        )
+        row_fb = cur_fb.fetchone()
+        cur_fb.close(); conn_fb.close()
+        
+        if row_fb:
+            orderid = row_fb[0]
+            print(f"[DEBUG] Falling back to latest dispatched order: {orderid}")
+        else:
+            return jsonify({"error": "No dispatched orders found to confirm"}), 400
+
+    if session.get('role') not in ('shop', 'shopkeeper'):
+        return jsonify({"error": "Forbidden"}), 403
+
+    shopuserid = session.get('user_id')
+    
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    # Check if order belongs to shopkeeper and is in dispatched state
+    cur.execute(
+        """UPDATE orders
+           SET status='confirmed', updated_at=NOW()
+           WHERE id=%s AND shop_user_id=%s AND status='dispatched'
+           RETURNING wholesaler_user_id, product_name""",
+        (orderid, shopuserid)
+    )
+    row = cur.fetchone()
+    # Get order details to update inventory
+    cur.execute("SELECT product_name, requested_qty, confirmed_qty, items_json FROM orders WHERE id=%s", (orderid,))
+    order_data = cur.fetchone()
+    
+    if order_data:
+        prod_name, req_qty, conf_qty, items_json = order_data
+        # If wholesaler didn't specify, use requested qty
+        final_qty = conf_qty if conf_qty is not None else req_qty
+        
+        if prod_name == "Bulk Order" and items_json:
+            try:
+                # items_json might be a string (from DB) or list/dict
+                items_data = items_json
+                if isinstance(items_data, str):
+                    items_data = json.loads(items_data)
+                
+                if isinstance(items_data, dict):
+                    # New format: {product_name: quantity}
+                    for item_p_name, item_p_qty in items_data.items():
+                        cur.execute(
+                            "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
+                            (float(item_p_qty), item_p_name)
+                        )
+                else:
+                    # For bulk orders (list), we distribute the confirmed quantity among the items
+                    multiplier = final_qty / req_qty if req_qty > 0 else 1
+                    for item_name in items_data:
+                        cur.execute(
+                            "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
+                            (multiplier, item_name)
+                        )
+            except Exception as e:
+                print(f"Restock error: {e}")
+        else:
+            # For single product orders, update the specific product
+            cur.execute(
+                "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
+                (final_qty, prod_name)
+            )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    if not row:
+        return jsonify({'error': 'Order not found, not dispatched, or access denied'}), 404
+
+    wholesaler_id = row[0]
+    # Notify wholesaler that receipt is confirmed
+    socketio.emit('new_order_alert', {
+        'shop_name': session.get('shop_name', 'Shopkeeper'),
+        'product_name': f'Receipt Confirmed: {row[1]} (Order #{orderid})',
+        'status': 'confirmed'
+    }, to=f'user_{wholesaler_id}')
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/wholesaler/shops', methods=['GET'])
+@login_required
+def api_wholesaler_shops():
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    wholesaler_id = session.get('user_id')
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT u.id, u.username, u.shop_name,
+               (SELECT COUNT(*) FROM orders o
+                WHERE o.shop_user_id = u.id
+                AND o.wholesaler_user_id = %s
+                AND o.status = 'pending') AS pending_orders,
+               (SELECT MAX(c.last_message_at)
+                FROM conversations c
+                WHERE c.shop_user_id = u.id
+                AND c.wholesaler_user_id = %s) AS last_active
+        FROM wholesaler_shop_links wsl
+        JOIN shops u ON u.id = wsl.shop_id
+        WHERE wsl.wholesaler_id = %s AND wsl.is_active = TRUE
+    """, (wholesaler_id, wholesaler_id, wholesaler_id))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return jsonify({'shops': [
+        {
+            'id': r[0], 'username': r[1],
+            'display_name': r[2] or r[1], 'shop_name': r[2],
+            'pending_orders': r[3], 'last_active': str(r[4]) if r[4] else None
+        }
+        for r in rows
+    ]})
+
+
+@app.route('/api/wholesaler/shops/link', methods=['POST'])
+@login_required
+def api_link_shop():
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    data          = request.get_json()
+    shop_username = data.get('shop_username', '').strip()
+    wholesaler_id = session.get('user_id')
+
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT id FROM shops WHERE username=%s AND role='shop'",
+        (shop_username,)
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify({'error': 'Shop not found'}), 404
+
+    shop_id = row[0]
+    cur.execute(
+        """INSERT INTO wholesaler_shop_links (wholesaler_id, shop_id)
+           VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+        (wholesaler_id, shop_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'success': True, 'shop_id': shop_id})
+
+@app.route('/api/wholesaler/analytics', methods=['GET'])
+@login_required
+def api_wholesaler_analytics():
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    wholesaler_id = session.get('user_id')
+    conn = get_db_connection()
+    cur  = conn.cursor()
+
+    # 1. Summary counts
+    cur.execute("""
+        SELECT
+            COUNT(*) FILTER (WHERE status != 'rejected') AS total_orders,
+            COUNT(*) FILTER (WHERE status = 'pending')   AS pending_orders,
+            COUNT(*) FILTER (WHERE status = 'dispatched') AS dispatched
+        FROM orders WHERE wholesaler_user_id = %s
+    """, (wholesaler_id,))
+    summary = cur.fetchone()
+
+    # 2. Top products by order count
+    cur.execute("""
+        SELECT product_name, COUNT(*) AS order_count,
+               SUM(confirmed_qty) AS total_qty
+        FROM orders
+        WHERE wholesaler_user_id = %s AND status != 'rejected'
+        GROUP BY product_name
+        ORDER BY order_count DESC
+        LIMIT 5
+    """, (wholesaler_id,))
+    top_products = cur.fetchall()
+
+    # 3. Top shops by order volume
+    cur.execute("""
+        SELECT u.username, u.shop_name,
+               COUNT(*) AS orders,
+               SUM(o.confirmed_qty) AS total_qty
+        FROM orders o
+        JOIN shops u ON u.id = o.shop_user_id
+        WHERE o.wholesaler_user_id = %s AND o.status != 'rejected'
+        GROUP BY u.id, u.username, u.shop_name
+        ORDER BY orders DESC
+        LIMIT 5
+    """, (wholesaler_id,))
+    top_shops = cur.fetchall()
+
+    # 4. Orders per day this week
+    cur.execute("""
+        SELECT DATE(created_at) AS day, COUNT(*) AS cnt
+        FROM orders
+        WHERE wholesaler_user_id = %s
+          AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY day ORDER BY day
+    """, (wholesaler_id,))
+    daily_orders = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return jsonify({
+        'summary': {
+            'total_orders': summary[0],
+            'pending_orders': summary[1],
+            'dispatched': summary[2],
+        },
+        'top_products': [
+            {'product': r[0], 'order_count': r[1], 'total_qty': float(r[2] or 0)}
+            for r in top_products
+        ],
+        'top_shops': [
+            {'name': r[1] or r[0], 'orders': r[2], 'total_qty': float(r[3] or 0)}
+            for r in top_shops
+        ],
+        'daily_orders': [
+            {'day': str(r[0]), 'count': r[1]}
+            for r in daily_orders
+        ],
+    })
+
+@app.route('/api/shop/orders', methods=['GET'])
+@login_required
+def api_shop_orders():
+    if session.get('role') not in ('shop', 'shopkeeper'):
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    shop_id = session.get('user_id')
+    status_filter = request.args.get('status')
+    
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    query = """
+        SELECT o.id, o.product_name, o.requested_qty, o.confirmed_qty,
+               o.unit, o.status, o.wholesaler_note, o.created_at,
+               s.shop_name AS wholesaler_name, o.items_json
+        FROM orders o
+        JOIN shops s ON s.id = o.wholesaler_user_id
+        WHERE o.shop_user_id = %s
+    """
+    params = [shop_id]
+    if status_filter:
+        query += " AND o.status = %s"
+        params.append(status_filter)
+    query += " ORDER BY o.created_at DESC"
+    
+    cur.execute(query, tuple(params))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    
+    return jsonify({'orders': [
+        {
+            'id': r[0], 'product_name': r[1], 'requested_qty': r[2],
+            'confirmed_qty': r[3], 'unit': r[4], 'status': r[5],
+            'note': r[6], 'created_at': str(r[7]),
+            'wholesaler_name': r[8],
+            'items_json': r[9]
+        }
+        for r in rows
+    ]})
+
+@app.route('/api/wholesaler/orders/<int:order_id>/edit', methods=['POST'])
+@login_required
+def api_edit_bulk_order(order_id):
+    if session.get('role') != 'wholesaler':
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    wholesaler_id = session.get('user_id')
+    data = request.get_json()
+    new_items = data.get('items') # Should be a list or dict
+    
+    if not new_items:
+        return jsonify({'error': 'No items provided'}), 400
+        
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Update requested_qty to be the length of items if it's a Bulk Order
+    cur.execute(
+        "UPDATE orders SET items_json = %s, requested_qty = %s WHERE id = %s AND wholesaler_user_id = %s",
+        (json.dumps(new_items), len(new_items) if isinstance(new_items, list) else 1, order_id, wholesaler_id)
+    )
+    conn.commit()
+    cur.close(); conn.close()
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
-    # Try different ports if 5001 is busy
+    import eventlet
+    import eventlet.wsgi
     port = 5001
-    print(f"\n🎯 Voice Inventory Management System with Measurement Units")
-    print(f"📍 Now supports: kg, g, liters, ml, packets, bottles, pieces")
+    print(f"\n🎯 QuickStock — Voice Inventory + Real-Time Chat")
     print(f"📍 Access: http://localhost:{port}")
-    print(f"\n🌟 Try these measurement commands:")
-    print(f"   • http://localhost:{port}/preprocess?text=2 kg aata beche")
-    print(f"   • http://localhost:{port}/preprocess?text=5 liters milk aa gaya")
-    print(f"   • http://localhost:{port}/preprocess?text=500 g sugar beche\n")
+    print(f"💬 Chat system: AES-256-GCM encrypted, WebSocket powered")
     print(f"Type Ctrl+C to stop the server\n")
-    
-    try:
-        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
-    except OSError:
-        print(f"Port {port} in use, trying {port}...")
-        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
+    socketio.run(app, host='0.0.0.0', port=port, debug=True)

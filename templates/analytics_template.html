@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Analytics — QuickStock</title>
+  <!-- Leaflet CSS (free, no API key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <!-- Chart.js (free) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
+    #map { height: 300px; border-radius: 8px; margin-bottom: 24px; z-index: 1; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    h2 { font-size: 16px; color: #333; margin: 0 0 12px; }
+  </style>
+</head>
+<body>
+  <h1 style="font-size:20px; margin-bottom:16px;">📊 My Shop Analytics</h1>
+
+  <!-- Map of nearby shops -->
+  <div class="card">
+    <h2>📍 Nearby Shops (2 km radius)</h2>
+    <div id="map"></div>
+  </div>
+
+  <!-- Sales trend chart -->
+  <div class="card">
+    <h2>📈 Daily Sales (Last {{ days }} days)</h2>
+    <canvas id="salesChart" height="200"></canvas>
+  </div>
+
+  <!-- Top products chart -->
+  <div class="card">
+    <h2>🏆 Top Products This Month</h2>
+    <canvas id="productsChart" height="200"></canvas>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // --- Map ---
+    const map = L.map('map').setView([20.5937, 78.9629], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add markers for nearby shops from Jinja2 data
+    const nearbyShops = {{ nearby_shops | tojson | safe }};
+    nearbyShops.forEach(shop => {
+      if (shop.latitude && shop.longitude) {
+        L.marker([shop.latitude, shop.longitude])
+          .addTo(map)
+          .bindPopup(`<b>${shop.shop_name}</b><br>${shop.distance_km} km away`);
+      }
+    });
+
+    // Try to centre map on user's position
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+        L.circle([pos.coords.latitude, pos.coords.longitude], { radius: 2000, color: '#4CAF50', fillOpacity: 0.1 }).addTo(map);
+      });
+    }
+
+    // --- Sales Trend Chart ---
+    const salesData = {{ sales_trend | tojson | safe }};
+    new Chart(document.getElementById('salesChart'), {
+      type: 'line',
+      data: {
+        labels: salesData.map(d => d.date),
+        datasets: [{
+          label: 'Daily Sales (₹)',
+          data: salesData.map(d => d.total),
+          borderColor: '#4CAF50',
+          backgroundColor: 'rgba(76,175,80,0.1)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // --- Top Products Chart ---
+    const topData = {{ top_products | tojson | safe }};
+    new Chart(document.getElementById('productsChart'), {
+      type: 'bar',
+      data: {
+        labels: topData.map(d => d.product),
+        datasets: [{
+          label: 'Revenue (₹)',
+          data: topData.map(d => d.revenue),
+          backgroundColor: '#2196F3'
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+  </script>
+</body>
+</html>

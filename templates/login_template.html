@@ -213,7 +213,7 @@
         {% endif %}
         {% endwith %}
 
-        <form action="/login" method="POST">
+        <form action="/login" method="POST" id="password-form">
             <div class="form-group">
                 <i class="ri-user-smile-line"></i>
                 <input type="text" name="username" placeholder="Username" required>
@@ -225,9 +225,38 @@
             <button type="submit" class="btn-login">Unlock System</button>
         </form>
 
+        <!-- OTP Login Form (Hidden by default) -->
+        <form action="/login/otp/send" method="POST" id="otp-form" style="display: none;">
+            <div class="form-group">
+                <i class="ri-smartphone-line"></i>
+                <input type="tel" name="phone" placeholder="Registered Mobile Number" required>
+            </div>
+            <button type="submit" class="btn-login">Send OTP</button>
+        </form>
+
         <div class="footer-links">
-            <p>&copy; 2026 QuickStock AI. <a href="#">Forgot access?</a></p>
+            <p id="toggle-text">Prefer OTP login? <a href="javascript:void(0)" onclick="toggleLogin()">Login with OTP</a></p>
+            <p class="mt-2">New shopkeeper? <a href="/register">Register here</a></p>
+            <p class="mt-2">&copy; 2026 QuickStock AI. <a href="#">Forgot access?</a></p>
         </div>
+
+        <script>
+            function toggleLogin() {
+                const passForm = document.getElementById('password-form');
+                const otpForm = document.getElementById('otp-form');
+                const toggleText = document.getElementById('toggle-text');
+                
+                if (passForm.style.display === 'none') {
+                    passForm.style.display = 'block';
+                    otpForm.style.display = 'none';
+                    toggleText.innerHTML = 'Prefer OTP login? <a href="javascript:void(0)" onclick="toggleLogin()">Login with OTP</a>';
+                } else {
+                    passForm.style.display = 'none';
+                    otpForm.style.display = 'block';
+                    toggleText.innerHTML = 'Prefer Password? <a href="javascript:void(0)" onclick="toggleLogin()">Login with Password</a>';
+                }
+            }
+        </script>
     </div>
 </body>
 

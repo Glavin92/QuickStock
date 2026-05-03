@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bill {{ bill[1] }}</title>
+  <style>
+    @media print { .no-print { display: none; } }
+    body { font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 16px; }
+    h2 { text-align: center; margin-bottom: 4px; }
+    .divider { border-top: 1px dashed #333; margin: 8px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td, th { padding: 4px 2px; text-align: left; }
+    th { border-bottom: 1px solid #333; }
+    .right { text-align: right; }
+    .total-row { font-weight: bold; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <h2>{{ bill[14] }}</h2>           {# shop_name (adjusted index from query) #}
+  <p style="text-align:center; font-size:12px;">{{ bill[15] }}<br>📞 {{ bill[16] }}</p>
+  <div class="divider"></div>
+  <p>Bill No: <strong>{{ bill[1] }}</strong><br>
+     Date: {{ bill[13].strftime('%d %b %Y %I:%M %p') }}<br>
+     Customer: {{ bill[3] }}
+     {% if bill[4] %} | 📞 {{ bill[4] }}{% endif %}
+  </p>
+  <div class="divider"></div>
+  <table>
+    <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th class="right">Amount</th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item[2] }}</td>
+        <td>{{ item[3] }} {{ item[4] }}</td>
+        <td>₹{{ item[5] }}</td>
+        <td class="right">₹{{ item[6] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="divider"></div>
+  <table>
+    <tr><td>Subtotal</td><td class="right">₹{{ bill[5] }}</td></tr>
+    {% if bill[6] > 0 %}<tr><td>Discount</td><td class="right">- ₹{{ bill[6] }}</td></tr>{% endif %}
+    {% if bill[7] > 0 %}<tr><td>GST ({{ bill[7] }}%)</td><td class="right">₹{{ bill[8] }}</td></tr>{% endif %}
+    <tr class="total-row"><td>TOTAL</td><td class="right">₹{{ bill[9] }}</td></tr>
+  </table>
+  <div class="divider"></div>
+  <p style="text-align:center; font-size:12px;">
+    Payment: {{ bill[10] | upper }}<br>Thank you for shopping! 🙏
+  </p>
+  <div class="no-print" style="text-align:center; margin-top:16px;">
+    <button onclick="window.print()">🖨️ Print / Save PDF</button>
+  </div>
+</body>
+</html>

@@ -163,6 +163,22 @@ _last_partial_hi = ""
 _last_partial_en = ""
 _english_word_buffer = set()
 
+
+def _post_json_with_retry(url, payload, timeout_seconds=10, retries=1, backoff_seconds=0.5):
+    """POST JSON with a small retry/backoff.
+
+    This keeps voice streaming responsive when the Flask app/DB is briefly slow.
+    """
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            return requests.post(url, json=payload, timeout=timeout_seconds)
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(backoff_seconds)
+    raise last_err
+
 def process_pcm_streaming(pcm):
     global _last_partial_hi, _last_partial_en
     results = {"final_hi": None, "final_en": None, "partial_hi": None, "partial_en": None}
@@ -187,18 +203,12 @@ def process_pcm_streaming(pcm):
             final_en = (res.get("text") or "").strip()
             if final_en:
                 results["final_en"] = final_en
-                # collect english words from final
-                for w in re.findall(r"[A-Za-z][A-Za-z'\-]*", final_en):
-                    _english_word_buffer.add(w)
         else:
             res = json.loads(recognizer_en.PartialResult())
             partial_en = (res.get("partial") or "").strip()
             if partial_en and partial_en != _last_partial_en:
                 _last_partial_en = partial_en
                 results["partial_en"] = partial_en
-            # collect english words from partial
-            for w in re.findall(r"[A-Za-z][A-Za-z'\-]*", partial_en):
-                _english_word_buffer.add(w)
     
     # Print partials
     if results["partial_hi"]:
@@ -209,6 +219,9 @@ def process_pcm_streaming(pcm):
     # Handle final results - combine or prioritize
     if results["final_hi"] or results["final_en"]:
         global BULK_MODE_ACTIVE, bulk_items_added
+
+        # IMPORTANT: reset english token buffer per utterance so it doesn't leak across commands
+        _english_word_buffer.clear()
         
         final_hi = results["final_hi"]
         final_en = results["final_en"]
@@ -300,15 +313,10 @@ def process_pcm_streaming(pcm):
                 final_hi = final_hi + " आ गया" if final_hi else chosen + " aa gaya"
                 print(f"🔵 Modified for restock: {final_hi}")
         
-        # Build merged Hinglish: Hindi (transliterated) + detected English tokens
+        # Build merged Hinglish:
+        # - If Hindi was chosen, avoid appending random English partials (causes garbled output)
+        # - If English was chosen, keep it as-is
         merged_hinglish = to_latin(chosen) if chosen_lang == "hi" else chosen
-        if _english_word_buffer:
-            # append any english tokens not already present
-            present = set(re.findall(r"[A-Za-z][A-Za-z'\-]*", merged_hinglish))
-            new_words = [w for w in _english_word_buffer if w not in present]
-            if new_words:
-                merged_hinglish = (merged_hinglish + " " + " ".join(new_words)).strip()
-                print("🌐 Merged Hinglish:", merged_hinglish)
 
         # Translate to pure English for display if needed
         english = to_english(chosen) if chosen_lang == "hi" else chosen
@@ -319,7 +327,13 @@ def process_pcm_streaming(pcm):
         try:
             if _has_requests and final_hi:
                 url = os.environ.get("APP_PROCESS_URL", "http://127.0.0.1:5001/preprocess")
-                resp = requests.post(url, json={"text": final_hi}, timeout=3)
+                resp = _post_json_with_retry(
+                    url,
+                    {"text": final_hi},
+                    timeout_seconds=float(os.environ.get("APP_PROCESS_TIMEOUT", "10")),
+                    retries=int(os.environ.get("APP_PROCESS_RETRIES", "1")),
+                    backoff_seconds=float(os.environ.get("APP_PROCESS_BACKOFF", "0.5")),
+                )
                 if resp.ok:
                     data = resp.json()
                     result = data.get("nlu_result") or data

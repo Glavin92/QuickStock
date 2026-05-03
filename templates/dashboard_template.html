@@ -11,6 +11,7 @@
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
     <!-- Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <style>
         :root {
@@ -327,6 +328,125 @@
         .btn-danger:hover {
             background: #dc2626;
         }
+
+        /* --- Chat UI --- */
+        .chat-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            height: calc(100vh - 200px);
+            min-height: 600px;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 24px;
+            overflow: hidden;
+            background: white;
+            box-shadow: var(--shadow-lg);
+            margin-top: 1rem;
+        }
+        .chat-sidebar {
+            border-right: 1px solid rgba(0,0,0,0.06);
+            background: #fafbfc;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-sidebar-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .conv-item {
+            padding: 14px 18px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            position: relative;
+            transition: background 0.15s;
+        }
+        .conv-item:hover { background: rgba(79,70,229,0.04); }
+        .conv-item.active { background: rgba(79,70,229,0.08); border-left: 3px solid var(--primary); }
+        .conv-item .conv-name { font-weight: 600; font-size: 0.95rem; color: var(--text-main); }
+        .conv-item .conv-preview { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
+        .conv-unread {
+            background: #ef4444; color: white;
+            border-radius: 50%; width: 22px; height: 22px;
+            font-size: 0.7rem; font-weight: 700; display: flex; align-items: center;
+            justify-content: center; position: absolute; right: 14px; top: 14px;
+        }
+        .chat-main { display: flex; flex-direction: column; background: white; overflow: hidden; }
+        .chat-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .msg-bubble {
+            max-width: 70%;
+            padding: 10px 16px;
+            border-radius: 18px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .msg-bubble.mine {
+            background: var(--primary-gradient);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 6px;
+        }
+        .msg-bubble.theirs {
+            background: #f1f5f9;
+            color: var(--text-main);
+            align-self: flex-start;
+            border-bottom-left-radius: 6px;
+        }
+        .msg-bubble.order_suggestion {
+            background: #fffcf0;
+            border: 1px solid #fbbf24;
+            color: var(--text-main);
+            white-space: pre-line;
+            max-width: 85%;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.1);
+        }
+        .msg-time { font-size: 0.7rem; color: rgba(0,0,0,0.4); margin-top: 6px; text-align: right; }
+        .msg-bubble.mine .msg-time { color: rgba(255,255,255,0.8); }
+        .msg-bubble.theirs .msg-time, .msg-bubble.order_suggestion .msg-time { color: #94a3b8; }
+        
+        /* Custom Scrollbar */
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-track { background: transparent; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .chat-messages::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        .chat-input-area {
+            display: flex;
+            padding: 14px 16px;
+            border-top: 1px solid rgba(0,0,0,0.06);
+            gap: 10px;
+        }
+        .chat-input-area input {
+            flex: 1; padding: 10px 18px;
+            border: 1px solid #e2e8f0; border-radius: 50px;
+            outline: none; font-size: 0.9rem;
+            font-family: 'Outfit', sans-serif;
+        }
+        .chat-input-area input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79,70,229,0.1); }
+        .btn-send {
+            background: var(--primary-gradient); color: white;
+            border: none; border-radius: 50%;
+            width: 42px; height: 42px;
+            cursor: pointer; font-size: 1.1rem;
+            display: grid; place-items: center;
+            transition: transform 0.15s;
+        }
+        .btn-send:hover { transform: scale(1.08); }
     </style>
 </head>
 
@@ -358,9 +478,19 @@
                 <i class="ri-pie-chart-2-line"></i>
                 <span>Analytics</span>
             </div>
+            <div id="nav-wholesaler-orders" class="nav-item" onclick="switchView('wholesaler-orders')">
+                <i class="ri-truck-line"></i>
+                <span>Wholesaler Orders</span>
+            </div>
             <div id="nav-history" class="nav-item" onclick="switchView('history')">
                 <i class="ri-file-list-3-line"></i>
                 <span>History Log</span>
+            </div>
+            <div id="nav-chat" class="nav-item" onclick="switchView('chat')">
+                <i class="ri-chat-3-line"></i>
+                <span>Chat</span>
+                <span id="nav-chat-badge"
+                    style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: auto; display: none;">0</span>
             </div>
             <hr style="border: none; border-top: 1px solid rgba(0,0,0,0.05); margin: 0.5rem 0;">
             <a href="/notifications" class="nav-item" style="text-decoration: none;">
@@ -419,13 +549,14 @@
                     </div>
                 </div>
                 <!-- Metric 2 -->
-                <div class="glass-card metric-card">
+                <div class="glass-card metric-card" onclick="location.href='/notifications'" style="cursor: pointer;">
                     <div class="metric-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
                         <i class="ri-box-3-line"></i>
                     </div>
                     <div>
                         <div class="metric-value" id="dashboard-low-stock">0</div>
-                        <div class="metric-label">Restock Needed</div>
+                        <div class="metric-label">Restock Needed <i class="ri-arrow-right-s-line"
+                                 style="vertical-align: middle;"></i></div>
                     </div>
                 </div>
                 <!-- Metric 3 -->
@@ -452,7 +583,7 @@
 
             <div class="glass-card" style="margin-bottom: 2rem;">
                 <h3 style="margin-bottom: 1.5rem;">Sales Prediction (Next 7 Days)</h3>
-                <div style="height: 300px; width: 100%;">
+                <div style="height: 300px; width: 100%; position: relative;">
                     <canvas id="salesChart"></canvas>
                 </div>
             </div>
@@ -501,12 +632,33 @@
             </div>
         </div>
 
+        <!-- VIEW 3.5: WHOLESALER ORDERS -->
+        <div id="view-wholesaler-orders" class="view-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3 style="margin:0;">Wholesaler Orders</h3>
+                <div class="filter-tabs" style="display:flex; gap:10px;">
+                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('')">All</button>
+                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('pending')">Pending</button>
+                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('dispatched')">Dispatched</button>
+                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('confirmed')">Confirmed</button>
+                </div>
+            </div>
+            <div id="wholesaler-orders-list">
+                <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+                    <i class="ri-loader-4-line ri-spin" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
+                    Loading orders...
+                </div>
+            </div>
+        </div>
+
         <!-- VIEW 4: ANALYTICS -->
         <div id="view-analytics" class="view-section">
             <div class="dashboard-grid">
                 <div class="glass-card" style="grid-column: span 2;">
                     <h3>Category Split</h3>
-                    <canvas id="categoryChart"></canvas>
+                    <div style="height: 300px; width: 100%; position: relative;">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
                 </div>
                 <div class="glass-card" style="grid-column: span 2;">
                     <h3>Weekly Trends</h3>
@@ -544,11 +696,41 @@
             </div>
         </div>
 
+        <!-- VIEW 6: CHAT -->
+        <div id="view-chat" class="view-section">
+            <div class="chat-layout">
+                <!-- Conversation List (left panel) -->
+                <div class="chat-sidebar" id="chat-sidebar">
+                    <div class="chat-sidebar-header">
+                        <h3 style="font-size:1rem; font-weight:700;">Conversations</h3>
+                        <button onclick="showNewChatModal()" class="btn" style="background:var(--primary-gradient); color:white; padding:6px 14px; border-radius:10px; font-size:0.85rem;" title="New Chat">＋ New</button>
+                    </div>
+                    <div id="conversation-list" style="flex:1; overflow-y:auto;"></div>
+                </div>
+
+                <!-- Message Area (right panel) -->
+                <div class="chat-main" id="chat-main">
+                    <div id="chat-placeholder" style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); flex-direction:column; gap:1rem;">
+                        <i class="ri-chat-3-line" style="font-size:3rem; opacity:0.3;"></i>
+                        <span>Select a conversation to start chatting</span>
+                    </div>
+
+                    <div id="chat-window" style="display:none; flex-direction:column; height:100%; overflow:hidden;">
+                        <div class="chat-header" id="chat-header">
+                            <strong id="chat-partner-name"></strong>
+                        </div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Type a message…"
+                                   onkeydown="if(event.key==='Enter') sendChatMessage()" maxlength="2000" />
+                            <button onclick="sendChatMessage()" class="btn-send"><i class="ri-send-plane-fill"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </main>
-
-    </div>
 
     <!-- Add Product Modal -->
     <div id="add-product-modal" class="modal-overlay" onclick="if(event.target === this) closeAddProductModal()">
@@ -593,49 +775,69 @@
         </div>
     </div>
 
+    <!-- Revenue Modal -->
+    <div id="revenue-modal" class="modal-overlay" onclick="if(event.target === this) this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3>Daily Revenue History</h3>
+                <button onclick="document.getElementById('revenue-modal').style.display='none'" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            <div class="table-wrap" style="margin-top:0;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th style="text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody id="revenue-modal-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- Global State ---
         let globalStats = {};
+        let salesChartInstance = null;
 
         // --- Navigation Logic ---
         function switchView(viewName) {
-            // 1. Update Sidebar Active State
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
             document.getElementById('nav-' + viewName).classList.add('active');
-
-            // 2. Hide all views
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-
-            // 3. Show selected view
             document.getElementById('view-' + viewName).classList.add('active');
 
-            // 4. Update Header Title
             const titles = {
                 'dashboard': 'Dashboard Overview',
                 'inventory': 'Inventory Management',
                 'orders': 'Order Processing',
                 'analytics': 'Business Intelligence',
-                'history': 'Transaction Logs'
+                'wholesaler-orders': 'Wholesaler Orders',
+                'history': 'Transaction Logs',
+                'chat': 'Chat with Wholesalers'
             };
             document.getElementById('page-title').innerText = titles[viewName];
 
-            // 5. Trigger Data Load
+            if (viewName === 'wholesaler-orders') loadWholesalerOrders();
+
             if (viewName === 'inventory') loadData();
-            if (viewName === 'orders') loadData(); // also refreshes pending
+            if (viewName === 'orders') loadData();
             if (viewName === 'analytics') loadAnalyticsCharts();
             if (viewName === 'history') loadHistory();
+            if (viewName === 'chat' && !chatSocket) initChat();
         }
 
         // --- Data Fetching ---
         async function loadData() {
             try {
-                // Fetch System Stats (Revenue, Status, Counts)
                 const sRes = await fetch('/dashboard_stats');
                 if (sRes.ok) {
                     const stats = await sRes.json();
                     globalStats = stats;
 
-                    // Update Voice Indicator
                     const indicatorText = document.getElementById('voice-status-text');
                     const indicatorDot = document.getElementById('voice-status-dot');
 
@@ -651,12 +853,10 @@
                         indicatorText.style.color = '#94a3b8';
                     }
 
-                    // Update Metrics
                     document.querySelector('.metric-value').innerText = "₹" + (stats.today_revenue || 0);
                     document.getElementById('dashboard-low-stock').innerText = stats.low_stock_count || 0;
                     document.getElementById('dashboard-pending').innerText = stats.pending_count || 0;
 
-                    // Update Sidebar Badge
                     const navBadge = document.getElementById('nav-orders-badge');
                     if (stats.pending_count > 0) {
                         navBadge.style.display = 'inline-block';
@@ -665,19 +865,15 @@
                         navBadge.style.display = 'none';
                     }
 
-                    // Update Charts with real data
                     if (stats.revenue_history) {
                         const labels = Object.keys(stats.revenue_history).sort();
                         const data = labels.map(l => stats.revenue_history[l]);
                         initCharts(labels, data);
                     }
                 }
-            } catch (e) {
-                console.error("Stats fetch failed:", e);
-            }
+            } catch (e) { console.error("Stats fetch failed:", e); }
 
             try {
-                // Render Orders List (View 3)
                 const qRes = await fetch('/pending_confirmations');
                 if (qRes.ok) {
                     const qData = await qRes.json();
@@ -711,20 +907,16 @@
                         </div>`;
                     }
                 }
-            } catch (e) {
-                console.error("Orders fetch failed:", e);
-            }
+            } catch (e) { console.error("Orders fetch failed:", e); }
 
             try {
-                // Fetch Inventory
                 const iRes = await fetch('/inventory');
                 if (iRes.ok) {
                     const iData = await iRes.json();
                     let products = iData.products || {};
                     let enNames = iData.english_names || {};
-
                     const tbody = document.getElementById('inventory-tbody');
-                    tbody.innerHTML = ''; // clear
+                    tbody.innerHTML = '';
 
                     const entries = Object.entries(products);
                     if (entries.length === 0) {
@@ -733,23 +925,30 @@
                         for (let [key, val] of entries) {
                             let name = enNames[key] || val.name || key;
                             name = name.charAt(0).toUpperCase() + name.slice(1);
-
                             let stock = val.current_stock || 0;
                             let thresh = val.threshold || 0;
                             let price = val.price || 0;
 
                             let statusHtml = '';
-                            let forecastHtml = 'Stable';
-
-                                 statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
+                            if (stock <= thresh) {
+                                statusHtml = `<span class="status-chip chip-danger">Low Stock</span>`;
+                            } else if (stock <= thresh * 1.5) {
+                                statusHtml = `<span class="status-chip chip-warning">Warning</span>`;
+                            } else {
+                                statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
                             }
 
                             let inputValue = price === 0 ? '' : price;
-
                             tbody.innerHTML += `
                                 <tr>
                                     <td style="font-weight:600;">${name}</td>
-                                    <td>${stock}</td>
+                                    <td>
+                                        <input type="number" class="price-input" value="${stock}" 
+                                            onchange="updateStock('${key}', this.value)" 
+                                            onkeypress="if(event.key === 'Enter') this.blur()"
+                                            style="width: 80px;"
+                                        />
+                                    </td>
                                     <td style="color:#64748b;">${val.unit || 'unit'}</td>
                                     <td>
                                         <input type="number" id="price-input-${key}" class="price-input" value="${inputValue}" 
@@ -770,18 +969,107 @@
                 }
             } catch (e) {
                 console.error("Inventory fetch failed:", e);
-                document.getElementById('inventory-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding: 2rem;">Error loading data. Please refresh.</td></tr>';
+                document.getElementById('inventory-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding: 2rem;">Error loading data.</td></tr>';
+            }
+        }
+        
+        async function loadWholesalerOrders(status = '') {
+            const list = document.getElementById('wholesaler-orders-list');
+            try {
+                const url = status ? `/api/shop/orders?status=${status}` : '/api/shop/orders';
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (!data.orders || data.orders.length === 0) {
+                    list.innerHTML = `<div style="text-align:center; padding:3rem; color:#94a3b8;">No orders found.</div>`;
+                    return;
+                }
+
+                list.innerHTML = data.orders.map(o => {
+                    let itemsHtml = '';
+                    if (o.product_name === 'Bulk Order' && o.items_json) {
+                        try {
+                            const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : o.items_json;
+                            let chips = '';
+                            if (Array.isArray(items)) {
+                                chips = items.map(item => `<span style="background: white; border: 1px solid #e2e8f0; padding: 3px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #1e293b;">${item}</span>`).join('');
+                            } else {
+                                // Object format {name: qty}
+                                chips = Object.entries(items).map(([name, qty]) => `<span style="background: white; border: 1px solid #e2e8f0; padding: 3px 10px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #1e293b;">${name}: <b>${qty}</b></span>`).join('');
+                            }
+                            itemsHtml = `
+                                <div style="margin-bottom: 1rem; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
+                                    <div style="font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Items included:</div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                        ${chips}
+                                    </div>
+                                </div>
+                            `;
+                        } catch (e) { console.error('JSON parse error', e); }
+                    }
+
+                    return `
+                    <div class="glass-card" style="margin-bottom:1rem; padding:1.5rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:1rem;">
+                            <div>
+                                <span class="status-chip ${o.status === 'confirmed' ? 'chip-success' : (o.status === 'dispatched' ? 'chip-warning' : 'chip-info')}">${o.status.toUpperCase()}</span>
+                                <div style="font-weight:700; font-size:1.1rem; margin-top:5px;">${o.product_name}</div>
+                                <div style="color:#64748b; font-size:0.9rem;">From: ${o.wholesaler_name}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.8rem; color:#94a3b8;">${new Date(o.created_at).toLocaleDateString()}</div>
+                                <div style="font-weight:600; margin-top:5px;">Qty: ${o.requested_qty} ${o.unit || ''}</div>
+                            </div>
+                        </div>
+                        ${itemsHtml}
+                        ${o.note ? `<div style="background:#f8fafc; padding:10px; border-radius:10px; font-size:0.9rem; margin-bottom:1rem;">📝 ${o.note}</div>` : ''}
+                        
+                        ${o.status === 'dispatched' ? `
+                            <button onclick="confirmReceipt(this, ${o.id})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:10px; font-weight:700;">
+                                🚚 Confirm Receipt
+                            </button>
+                        ` : ''}
+                    </div>
+                `;}).join('');
+            } catch (e) {
+                list.innerHTML = `<div style="color:red; text-align:center;">Error loading orders.</div>`;
             }
         }
 
         // --- Actions ---
+        async function handleLowStock(data, productName) {
+            if (data && data.low_stock) {
+                if (confirm(`⚠️ Low Stock Detected: ${productName}. Would you like to send a restock suggestion to your wholesaler?`)) {
+                    try {
+                        const res = await fetch('/api/send_order_suggestion', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ product: productName })
+                        });
+                        if (res.ok) {
+                            alert("Restock suggestion sent to wholesaler!");
+                        } else {
+                            alert("Failed to send suggestion.");
+                        }
+                    } catch (e) { console.error("Send suggestion failed:", e); }
+                }
+            }
+        }
+
         async function approveTx(id) {
-            await fetch('/confirm_action', {
+            const res = await fetch('/confirm_action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id })
             });
-            loadData(); // refresh
+            const data = await res.json();
+            
+            // Check for low stock in result
+            if (data.result && data.result.low_stock) {
+                await handleLowStock(data.result, data.result.product);
+            }
+            
+            loadData();
         }
 
         async function rejectTx(id) {
@@ -790,17 +1078,36 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id })
             });
-            loadData(); // refresh
+            loadData();
         }
 
-        // --- Charts ---
-        let salesChartInstance = null;
-        function initCharts(labels = [], data = []) {
-            const ctx = document.getElementById('salesChart').getContext('2d');
-            
-            if (salesChartInstance) {
-                salesChartInstance.destroy();
+        async function updatePrice(name, price) {
+            await fetch('/update_price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, price })
+            });
+            loadData();
+        }
+
+        async function updateStock(name, stock) {
+            const res = await fetch('/update_stock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, stock })
+            });
+            const data = await res.json();
+            if (data.low_stock) {
+                await handleLowStock(data, name);
             }
+            loadData();
+        }
+
+        function initCharts(labels = [], data = []) {
+            const canvas = document.getElementById('salesChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (salesChartInstance) salesChartInstance.destroy();
 
             const gradient = ctx.createLinearGradient(0, 0, 0, 400);
             gradient.addColorStop(0, 'rgba(79, 70, 229, 0.4)');
@@ -833,7 +1140,6 @@
 
         function loadAnalyticsCharts() {
             const ctx2 = document.getElementById('categoryChart').getContext('2d');
-            // Check if chart instance exists, destroy (omitted for brevity, simple overwrite works in simple cases or need global var)
             new Chart(ctx2, {
                 type: 'doughnut',
                 data: {
@@ -843,21 +1149,17 @@
                         backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
                         borderWidth: 0
                     }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
                 }
             });
         }
 
-            });
-        }
-
-        // --- Product CRUD ---
-        function showAddProductModal() {
-            document.getElementById('add-product-modal').style.display = 'flex';
-        }
-
-        function closeAddProductModal() {
-            document.getElementById('add-product-modal').style.display = 'none';
-        }
+        function showAddProductModal() { document.getElementById('add-product-modal').style.display = 'flex'; }
+        function closeAddProductModal() { document.getElementById('add-product-modal').style.display = 'none'; }
 
         async function submitAddProduct() {
             const name = document.getElementById('new-prod-name').value;
@@ -876,25 +1178,18 @@
                 closeAddProductModal();
                 document.getElementById('add-product-form').reset();
                 loadData();
-            } else {
-                alert("Failed to add product.");
-            }
+            } else { alert("Failed to add product."); }
         }
 
         async function deleteProduct(name) {
             if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-
             const res = await fetch('/delete_product', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
             });
-
-            if (res.ok) {
-                loadData();
-            } else {
-                alert("Failed to delete product.");
-            }
+            if (res.ok) loadData();
+            else alert("Failed to delete product.");
         }
 
         async function loadHistory() {
@@ -903,95 +1198,319 @@
                 const data = await res.json();
                 const tbody = document.getElementById('history-tbody');
                 tbody.innerHTML = '';
-
                 if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No transactions recorded yet.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No transactions recorded.</td></tr>';
                     return;
                 }
-
                 data.forEach(row => {
-                    let badge = row.action === 'sale'
-                        ? '<span class="status-chip chip-success">SALE</span>'
-                        : '<span class="status-chip chip-warning">RESTOCK</span>';
-
+                    let badge = row.action === 'sale' ? '<span class="status-chip chip-success">SALE</span>' : '<span class="status-chip chip-warning">RESTOCK</span>';
                     let dateObj = new Date(row.timestamp);
                     let timeStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
                     let amount = row.total_amount ? `₹${row.total_amount}` : '-';
-
-                    tbody.innerHTML += `
-                        <tr>
-                            <td style="color:var(--text-muted); font-size:0.9rem;">${timeStr}</td>
-                            <td>${badge}</td>
-                            <td style="font-weight:600;">${row.product_en || row.product}</td>
-                            <td>${row.quantity} ${row.unit}</td>
-                            <td style="font-weight:700; color:${row.action === 'sale' ? '#10b981' : '#64748b'}">${amount}</td>
-                            <td>${row.old_stock} ➝ <b>${row.new_stock}</b></td>
-                        </tr>
-                    `;
+                    tbody.innerHTML += `<tr><td style="color:var(--text-muted); font-size:0.9rem;">${timeStr}</td><td>${badge}</td><td style="font-weight:600;">${row.product_en || row.product}</td><td>${row.quantity} ${row.unit}</td><td style="font-weight:700; color:${row.action === 'sale' ? '#10b981' : '#64748b'}">${amount}</td><td>${row.old_stock} ➝ <b>${row.new_stock}</b></td></tr>`;
                 });
             } catch (e) { console.error(e); }
         }
 
-        // --- Start Modal Logic ---
         function showRevenueModal() {
-            const modal = document.getElementById('revenue-modal');
+            document.getElementById('revenue-modal').style.display = 'flex';
             const tbody = document.getElementById('revenue-modal-body');
             tbody.innerHTML = '';
-
             const history = globalStats.revenue_history || {};
-
-            // Sort dates descending
             const sortedDates = Object.keys(history).sort().reverse();
-
             if (sortedDates.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="2">No revenue history.</td></tr>';
             } else {
                 sortedDates.forEach(dateStr => {
-                    let val = history[dateStr];
-                    tbody.innerHTML += `
-                        <tr>
-                            <td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; font-weight:500;">${dateStr}</td>
-                            <td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; text-align:right; font-weight:700; color:#10b981;">₹${val}</td>
-                        </tr>
-                    `;
+                    tbody.innerHTML += `<tr><td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; font-weight:500;">${dateStr}</td><td style="padding:0.8rem; border-bottom:1px solid #f1f5f9; text-align:right; font-weight:700; color:#10b981;">₹${history[dateStr]}</td></tr>`;
                 });
             }
-
-            modal.style.display = 'flex';
         }
 
-        function closeRevenueModal() {
-            document.getElementById('revenue-modal').style.display = 'none';
+        // --- Auto-Refresh Polling ---
+        const AUTO_REFRESH_MS = 10000; // refresh every 10 seconds
+        let autoRefreshTimer = null;
+
+        function getActiveView() {
+            const active = document.querySelector('.view-section.active');
+            return active ? active.id.replace('view-', '') : 'dashboard';
         }
 
-        async function updatePrice(productName, newPrice) {
-            if (newPrice && !isNaN(newPrice)) {
-                try {
-                    let res = await fetch('/update_price', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ product: productName, price: newPrice })
-                    });
-                    let data = await res.json();
-                    if (data.success) {
-                        console.log('Price updated for ' + productName);
-                        loadData();
-                    } else {
-                        console.error('Error: ' + (data.error || 'Failed'));
-                    }
-                } catch (e) {
-                    console.error('Connection error', e);
-                }
+        function autoRefresh() {
+            const view = getActiveView();
+            // Always refresh stats (dashboard metrics, pending badge, voice status)
+            loadData();
+            // Also refresh view-specific data
+            if (view === 'history') loadHistory();
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+            autoRefreshTimer = setInterval(autoRefresh, AUTO_REFRESH_MS);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
             }
         }
-        // --- End Modal Logic ---
 
-        // Init
-        initCharts();
-        loadData();
-        setInterval(loadData, 5000); // Live poll
+        // Pause polling when tab is hidden, resume when visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                autoRefresh();       // immediate refresh on return
+                startAutoRefresh();
+            }
+        });
 
+        // ── Chat Client ──────────────────────────────────────────────
+        let chatSocket = null;
+        let activeConvId = null;
+        let chatJwt = null;
+        let currentUserId = null;
+
+        async function initChat() {
+            try {
+                const res = await fetch('/api/chat_token', { method: 'POST' });
+                const data = await res.json();
+                chatJwt = data.token;
+                currentUserId = data.user_id;
+
+                chatSocket = io({ query: { token: chatJwt } });
+
+                chatSocket.on('connect', () => {
+                    console.log('[Chat] Socket connected');
+                    loadConversations();
+                });
+
+                chatSocket.on('new_message', (msg) => {
+                    if (msg.conversation_id === activeConvId) {
+                        appendMessage(msg);
+                        chatSocket.emit('mark_read', { conversation_id: activeConvId });
+                    } else {
+                        incrementUnread(msg.conversation_id);
+                    }
+                });
+
+                chatSocket.on('joined', (data) => {
+                    console.log('[Chat] Joined room', data.room);
+                    loadMessages(data.conversation_id);
+                });
+
+                chatSocket.on('error', (err) => console.error('[Chat] Error:', err.msg));
+                chatSocket.on('disconnect', () => console.log('[Chat] Socket disconnected'));
+            } catch (e) {
+                console.error('[Chat] Init failed:', e);
+            }
+        }
+
+        async function loadConversations() {
+            try {
+                const res  = await fetch('/api/conversations');
+                const data = await res.json();
+                const list = document.getElementById('conversation-list');
+                list.innerHTML = '';
+                let totalUnread = 0;
+
+                (data.conversations || []).forEach(conv => {
+                    totalUnread += conv.unread_count || 0;
+                    const item = document.createElement('div');
+                    item.className = 'conv-item';
+                    item.dataset.convId = conv.conversation_id;
+                    item.innerHTML = `
+                        <div class="conv-name">${escapeHtml(conv.display_name)}</div>
+                        <div class="conv-preview">${escapeHtml(conv.shop_name || '')}</div>
+                        ${conv.unread_count > 0
+                            ? `<div class="conv-unread">${conv.unread_count}</div>`
+                            : ''}
+                    `;
+                    item.onclick = () => openConversation(conv.conversation_id, conv.display_name);
+                    list.appendChild(item);
+                });
+
+                // Update nav badge
+                const badge = document.getElementById('nav-chat-badge');
+                if (totalUnread > 0) {
+                    badge.textContent = totalUnread;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) { console.error('[Chat] Load conversations failed:', e); }
+        }
+
+        function openConversation(convId, partnerName) {
+            activeConvId = convId;
+            document.getElementById('chat-placeholder').style.display = 'none';
+            document.getElementById('chat-window').style.display     = 'flex';
+            document.getElementById('chat-partner-name').textContent  = partnerName;
+            document.getElementById('chat-messages').innerHTML        = '';
+
+            // Highlight active conversation
+            document.querySelectorAll('.conv-item').forEach(el => {
+                el.classList.toggle('active', parseInt(el.dataset.convId) === convId);
+                if (parseInt(el.dataset.convId) === convId) {
+                    const badge = el.querySelector('.conv-unread');
+                    if (badge) badge.remove();
+                }
+            });
+
+            chatSocket.emit('join_conversation', { conversation_id: convId });
+        }
+
+        async function loadMessages(convId) {
+            try {
+                const res  = await fetch(`/api/conversations/${convId}/messages?limit=50`);
+                const data = await res.json();
+                const box  = document.getElementById('chat-messages');
+                box.innerHTML = '';
+                (data.messages || []).forEach(msg => appendMessage(msg, false));
+                box.scrollTop = box.scrollHeight;
+                chatSocket.emit('mark_read', { conversation_id: convId });
+            } catch (e) { console.error('[Chat] Load messages failed:', e); }
+        }
+
+        function appendMessage(msg, scroll = true) {
+            const box    = document.getElementById('chat-messages');
+            const isMine = msg.sender_id === currentUserId;
+            const div    = document.createElement('div');
+            const time   = new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            
+            let extraHtml = '';
+            if (msg.message_type === 'order_dispatch' && !isMine) {
+                extraHtml = `
+                    <div style="margin-top:10px;">
+                        <button onclick="confirmReceipt(this, ${msg.order_id || 'null'})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:8px; font-weight:700;">
+                           🚚 Confirm Receipt
+                        </button>
+                    </div>`;
+            }
+
+            const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
+            div.className = `msg-bubble ${isMine ? 'mine' : 'theirs'} ${typeClass}`;
+            div.innerHTML  = `${escapeHtml(msg.text)}${extraHtml}<div class="msg-time">${time}</div>`;
+            box.appendChild(div);
+            if (scroll) box.scrollTop = box.scrollHeight;
+        }
+
+        async function confirmReceipt(btn, orderId) {
+            if (!confirm('Are you sure you have received these items?')) return;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Confirming...';
+
+            try {
+                const res = await fetch('/api/confirm-order-receipt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderid: orderId })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(`Error ${res.status}: ${err.error || 'Failed'}`);
+                    btn.disabled = false;
+                    btn.innerHTML = '🚚 Confirm Receipt';
+                    return;
+                }
+
+                const data = await res.json();
+                if (data.success) {
+                    btn.style.background = '#059669';
+                    btn.innerHTML = '✅ Received & Confirmed';
+                    btn.onclick = null;
+                    if (typeof loadData === 'function') loadData();
+                } else {
+                    alert(data.error || 'Failed to confirm receipt');
+                    btn.disabled = false;
+                    btn.innerHTML = '🚚 Confirm Receipt';
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
+                btn.disabled = false;
+                btn.innerHTML = '🚚 Confirm Receipt';
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text  = input.value.trim();
+            if (!text || !activeConvId || !chatSocket) return;
+            chatSocket.emit('send_message', {
+                conversation_id: activeConvId,
+                text:            text,
+                message_type:    'text',
+            });
+            input.value = '';
+        }
+
+        async function showNewChatModal() {
+            try {
+                const res  = await fetch('/api/wholesalers');
+                const data = await res.json();
+                const wholesalers = data.wholesalers || [];
+                if (wholesalers.length === 0) {
+                    alert('No wholesalers are registered yet.');
+                    return;
+                }
+                const listing = wholesalers.map(w => `ID ${w.id}: ${w.display_name}`).join('\n');
+                const input = prompt(
+                    'Available wholesalers:\n' + listing + '\n\nEnter wholesaler ID:'
+                );
+                if (!input) return;
+                const wId = parseInt(input);
+                if (isNaN(wId)) return;
+                const r2   = await fetch('/api/conversations/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ other_user_id: wId }),
+                });
+                const d2   = await r2.json();
+                if (d2.error) {
+                    alert(d2.error);
+                    return;
+                }
+                if (d2.conversation_id) {
+                    await loadConversations();
+                    const w = wholesalers.find(x => x.id === wId);
+                    openConversation(d2.conversation_id, w ? w.display_name : `Wholesaler ${wId}`);
+                }
+            } catch (e) { console.error('[Chat] New chat failed:', e); }
+        }
+
+        function incrementUnread(convId) {
+            const item = document.querySelector(`.conv-item[data-conv-id="${convId}"]`);
+            if (item) {
+                let badge = item.querySelector('.conv-unread');
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'conv-unread';
+                    badge.textContent = '0';
+                    item.appendChild(badge);
+                }
+                badge.textContent = parseInt(badge.textContent) + 1;
+            }
+            // Update nav badge
+            const navBadge = document.getElementById('nav-chat-badge');
+            const current = parseInt(navBadge.textContent) || 0;
+            navBadge.textContent = current + 1;
+            navBadge.style.display = 'inline-block';
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                       .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        }
+
+        // Initial Load + start polling
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            startAutoRefresh();
+        });
     </script>
 </body>
 

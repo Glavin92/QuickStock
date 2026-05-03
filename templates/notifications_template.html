@@ -144,25 +144,67 @@
         <div>
             <a href="/" class="btn-back"><i class="ri-arrow-left-line"></i> Back to Dashboard</a>
             <h1 style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">Low Stock Alerts</h1>
-            <p style="color: var(--text-muted);">Items with critical stock levels (<= 3 units).</p>
+            <p style="color: var(--text-muted);">Items that have fallen below their configured alert thresholds.</p>
         </div>
         <i class="ri-notification-3-line" style="font-size: 2.5rem; color: #ef4444;"></i>
     </div>
 
-    <div class="notifications-grid">
+    <div style="margin-bottom: 2rem;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; gap: 20px;">
+            <div style="flex: 1;">
+                <h2 style="font-size: 1.5rem; font-weight: 700;">Recommended for Restock</h2>
+                <div style="margin-top: 1rem; display: flex; gap: 10px; align-items: center;">
+                    <select id="add-item-select" 
+                        style="flex: 1; padding: 0.8rem; border-radius: 12px; border: 1px solid #e2e8f0; font-family: inherit; appearance: none; background: white; cursor: pointer;">
+                        <option value="" disabled selected>Select an existing product...</option>
+                        {% for prod in all_products %}
+                        <option value="{{ prod }}">{{ prod }}</option>
+                        {% endfor %}
+                    </select>
+                    <button onclick="addManualItem()" style="padding: 0.8rem 1.5rem; border-radius: 12px; background: #4f46e5; color: white; border: none; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                        <i class="ri-add-line"></i> Add
+                    </button>
+                    <button onclick="addNewProductPrompt()" style="padding: 0.8rem 1.5rem; border-radius: 12px; background: #10b981; color: white; border: none; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                        <i class="ri-star-line"></i> New Product
+                    </button>
+                </div>
+            </div>
+            <button class="btn-order" id="bulk-order-btn" onclick="sendBulkOrder()"
+                style="padding: 0.8rem 2rem; border-radius: 12px; height: fit-content;">
+                <i class="ri-send-plane-fill"></i> Send Order to Distributor
+            </button>
+        </div>
+        <div
+            style="margin-top: 1.5rem; background:white; padding: 1.5rem; border-radius: 20px; border: 1px solid #e2e8f0;">
+            <label style="display:block; margin-bottom: 0.8rem; font-weight: 600; color: var(--text-main);">Add Custom
+                Note:</label>
+            <textarea id="extra-text" placeholder="e.g. Please deliver by tomorrow morning."
+                style="width: 100%; min-height: 60px; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 0.95rem;"></textarea>
+        </div>
+    </div>
+
+    <div class="notifications-grid" id="notif-grid">
         {% if items %}
         {% for item in items %}
         <div class="notif-card" id="card-{{ item.name }}">
-            <div class="notif-header">
-                <div class="item-name">{{ item.name }}</div>
-                <div class="stock-badge">{{ item.current_stock }} {{ item.unit }} left</div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <input type="checkbox" class="item-checkbox" value="{{ item.name }}" checked
+                    style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
+                <div style="flex: 1;">
+                    <div class="notif-header">
+                        <div class="item-name">{{ item.name }}</div>
+                        <div class="stock-badge">{{ item.current_stock }} {{ item.unit }} left</div>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px;">
+                        <div style="color: var(--text-muted); font-size: 0.9rem;">Threshold: {{ item.threshold }}</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
+                            <input type="number" class="item-qty" data-name="{{ item.name }}" value="10" 
+                                style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="color: var(--text-muted); font-size: 0.95rem;">
-                Threshold: {{ item.threshold }} | Current Stock is critical.
-            </div>
-            <button class="btn-order" onclick="placeOrder('{{ item.name }}')">
-                <i class="ri-truck-line"></i> Order from Distributor
-            </button>
         </div>
         {% endfor %}
         {% else %}
@@ -175,25 +217,131 @@
     </div>
 
     <script>
-        async function placeOrder(itemName) {
-            const btn = event.target.closest('button');
-            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Processing...';
+        function addManualItem() {
+            const select = document.getElementById('add-item-select');
+            const name = select.value;
+            if (!name) {
+                alert("Please select a product first.");
+                return;
+            }
+
+            const grid = document.getElementById('notif-grid');
+            const existing = document.getElementById(`card-${name}`);
+            if (existing) {
+                alert("Item already in list!");
+                return;
+            }
+
+            // Remove empty state if present
+            const empty = grid.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const html = `
+                <div class="notif-card" id="card-${name}" style="border-color: #cbd5e1;">
+                    <div style="display: flex; gap: 15px; align-items: flex-start;">
+                        <input type="checkbox" class="item-checkbox" value="${name}" checked
+                            style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
+                        <div style="flex: 1;">
+                            <div class="notif-header">
+                                <div class="item-name">${name}</div>
+                                <div class="stock-badge" style="background:#e2e8f0; color:#475569;">Selected</div>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
+                                    <input type="number" class="item-qty" data-name="${name}" value="10" 
+                                        style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.insertAdjacentHTML('afterbegin', html);
+        }
+
+        function addNewProductPrompt() {
+            const name = prompt("Enter the name of the new product:");
+            if (!name) return;
+
+            const grid = document.getElementById('notif-grid');
+            const existing = document.getElementById(`card-${name}`);
+            if (existing) {
+                alert("Item already in list!");
+                return;
+            }
+
+            // Remove empty state if present
+            const empty = grid.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const html = `
+                <div class="notif-card" id="card-${name}" style="border-color: #10b981;">
+                    <div style="display: flex; gap: 15px; align-items: flex-start;">
+                        <input type="checkbox" class="item-checkbox" value="${name}" checked
+                            style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
+                        <div style="flex: 1;">
+                            <div class="notif-header">
+                                <div class="item-name">${name}</div>
+                                <div class="stock-badge" style="background:#dcfce7; color:#166534;">New Product</div>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
+                                    <input type="number" class="item-qty" data-name="${name}" value="10" 
+                                        style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.insertAdjacentHTML('afterbegin', html);
+        }
+
+        async function sendBulkOrder() {
+            const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert("Please select at least one item.");
+                return;
+            }
+
+            const items = {};
+            checkboxes.forEach(cb => {
+                const name = cb.value;
+                const qtyInput = document.querySelector(`.item-qty[data-name="${name}"]`);
+                items[name] = qtyInput ? qtyInput.value : 1;
+            });
+
+            const extraText = document.getElementById('extra-text').value;
+            const btn = document.getElementById('bulk-order-btn');
+
+            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Sending Order...';
             btn.disabled = true;
 
             try {
                 const res = await fetch('/order_distributor', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ item: itemName })
+                    body: JSON.stringify({
+                        items: items,
+                        extra_text: extraText
+                    })
                 });
                 const data = await res.json();
 
                 if (data.success) {
                     btn.style.background = '#10b981';
-                    btn.innerHTML = '<i class="ri-check-line"></i> Order Placed!';
+                    btn.innerHTML = '<i class="ri-check-line"></i> Order Sent via Chat!';
                     setTimeout(() => {
-                        document.getElementById('card-' + itemName).style.opacity = '0.5';
-                    }, 1000);
+                        btn.style.background = '';
+                        btn.innerHTML = '<i class="ri-send-plane-fill"></i> Send Order to Distributor';
+                        btn.disabled = false;
+                    }, 3000);
+                } else {
+                    alert(data.message || "Failed to send order.");
+                    btn.innerHTML = '<i class="ri-error-warning-line"></i> Failed. Try Again';
+                    btn.disabled = false;
                 }
             } catch (e) {
                 console.error(e);

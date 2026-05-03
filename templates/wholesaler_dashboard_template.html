@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wholesaler Dashboard - QuickStock</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <!-- Charts & Sockets -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Outfit', sans-serif; background: var(--bg-color); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px; background: var(--surface); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; padding: 1.5rem;
+        }
+        .brand { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin-bottom: 2.5rem; display: flex; align-items: center; gap: 10px; }
+        .nav-item {
+            padding: 0.8rem 1rem; border-radius: 12px; margin-bottom: 0.5rem; cursor: pointer;
+            display: flex; align-items: center; gap: 12px; font-weight: 500; color: var(--text-muted);
+            transition: all 0.2s;
+        }
+        .nav-item:hover { background: #f1f5f9; color: var(--text-main); }
+        .nav-item.active { background: var(--primary); color: white; }
+        .nav-item i { font-size: 1.2rem; }
+        .logout-btn { margin-top: auto; color: var(--danger); }
+        .logout-btn:hover { background: #fef2f2; color: var(--danger); }
+
+        /* Main Content */
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Stats Bar */
+        .stats-bar {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem; padding: 1.5rem;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+        }
+        .stat-card { padding: 1rem; border-radius: 12px; background: #f8fafc; border: 1px solid var(--border); }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+        .stat-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+
+        /* Tabs */
+        .tab-content { flex: 1; padding: 1.5rem; overflow-y: auto; display: none; }
+        .tab-content.active { display: block; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .section-title { font-size: 1.25rem; font-weight: 600; }
+
+        /* Orders Tab */
+        .order-filters { display: flex; gap: 10px; margin-bottom: 1.5rem; }
+        .filter-btn {
+            padding: 6px 16px; border-radius: 20px; border: 1px solid var(--border); background: white;
+            font-size: 0.9rem; cursor: pointer; font-weight: 500; color: var(--text-muted);
+        }
+        .filter-btn.active { background: var(--text-main); color: white; border-color: var(--text-main); }
+        
+        .orders-list { display: flex; flex-direction: column; gap: 1rem; }
+        .order-card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; box-shadow: var(--shadow-sm); }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }
+        .order-shop { font-weight: 600; font-size: 1.1rem; }
+        .order-time { font-size: 0.85rem; color: var(--text-muted); }
+        .order-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+        .order-badge.pending { background: #fef3c7; color: #d97706; }
+        .order-badge.confirmed { background: #dbeafe; color: #2563eb; }
+        .order-badge.dispatched { background: #d1fae5; color: #059669; }
+        .order-badge.rejected { background: #fee2e2; color: #dc2626; }
+        
+        .order-product { font-size: 1rem; margin-bottom: 1rem; }
+        .order-note { background: #f8fafc; padding: 10px; border-radius: 8px; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
+        .order-actions { display: flex; gap: 10px; align-items: center; }
+        .order-actions input { padding: 8px; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+        .btn-action { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; color: white; font-size: 0.9rem; }
+        .btn-confirm { background: var(--success); }
+        .btn-dispatch { background: var(--primary); }
+        .btn-reject { background: var(--danger); }
+
+        /* Shops Tab */
+        .shops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
+        .shop-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; text-align: center; }
+        .shop-avatar { width: 60px; height: 60px; background: var(--primary); color: white; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; font-weight: 700; margin: 0 auto 1rem; }
+        .shop-name { font-weight: 600; font-size: 1.1rem; margin-bottom: 4px; }
+        .shop-meta { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; }
+        .shop-status { font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 12px; display: inline-block; margin-bottom: 1rem; }
+        .shop-status.online { background: #d1fae5; color: #059669; }
+        .shop-status.offline { background: #f1f5f9; color: #64748b; }
+        .shop-orders-badge { background: #fee2e2; color: #dc2626; font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 12px; margin-bottom: 1rem; display: inline-block; }
+        .shop-actions { display: flex; gap: 10px; justify-content: center; }
+        .btn-sm { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: white; }
+        .btn-sm:hover { background: #f8fafc; }
+
+        /* Analytics Tab */
+        .analytics-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .chart-card { background: white; border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .table-card { background: white; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+        .table-card table { width: 100%; border-collapse: collapse; text-align: left; }
+        .table-card th { background: #f8fafc; padding: 12px 16px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .table-card td { padding: 12px 16px; font-size: 0.95rem; border-bottom: 1px solid var(--border); }
+
+        /* Chat Tab */
+        .chat-layout { 
+            display: grid; 
+            grid-template-columns: 320px 1fr; 
+            height: calc(100vh - 200px); 
+            min-height: 600px;
+            border: 1px solid var(--border); 
+            border-radius: 24px; 
+            overflow: hidden; 
+            background: white; 
+            box-shadow: var(--shadow-lg);
+            margin-top: 1rem;
+        }
+        .chat-sidebar { border-right: 1px solid var(--border); background: #fafbfc; display: flex; flex-direction: column; }
+        .chat-sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+        .conv-item { padding: 14px 16px; cursor: pointer; border-bottom: 1px solid var(--border); position: relative; }
+        .conv-item:hover { background: #f1f5f9; }
+        .conv-item.active { background: #eef2ff; border-left: 3px solid var(--primary); }
+        .conv-name { font-weight: 600; font-size: 0.95rem; }
+        .conv-preview { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+        .conv-unread { background: var(--danger); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center; position: absolute; right: 16px; top: 16px; }
+        
+        .chat-main { display: flex; flex-direction: column; overflow: hidden; }
+        .chat-header { padding: 16px; border-bottom: 1px solid var(--border); font-weight: 600; background: white; }
+        .chat-messages { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            background: white; 
+        }
+        /* Custom Scrollbar */
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-track { background: transparent; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .chat-messages::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        .msg-bubble { max-width: 70%; padding: 10px 16px; border-radius: 18px; font-size: 0.9rem; line-height: 1.5; }
+        .msg-bubble.mine { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg-bubble.theirs { background: #f1f5f9; color: var(--text-main); align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-bubble.order_suggestion { 
+            background: #fffcf0; 
+            border: 1px solid #fbbf24; 
+            color: var(--text-main); 
+            white-space: pre-line; 
+            max-width: 85%; 
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.1);
+        }
+        .msg-time { font-size: 0.7rem; color: rgba(0,0,0,0.4); margin-top: 6px; text-align: right; }
+        .msg-bubble.mine .msg-time { color: rgba(255,255,255,0.8); }
+        .msg-bubble.theirs .msg-time, .msg-bubble.order_suggestion .msg-time { color: #94a3b8; }
+        .msg-bubble.system { background: #f8fafc; border: 1px dashed var(--border); color: var(--text-muted); align-self: center; font-size: 0.8rem; text-align: center; }
+        
+        .chat-input-area { display: flex; padding: 16px; border-top: 1px solid var(--border); gap: 10px; background: white; }
+        .chat-input-area input { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 20px; outline: none; font-family: inherit; }
+        .chat-input-area input:focus { border-color: var(--primary); }
+        .btn-send { background: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: grid; place-items: center; }
+        
+        .btn-create-order { margin-top: 10px; background: #ea580c; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+        .btn-create-order:hover { background: #c2410c; }
+
+        /* Toast */
+        #toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 500; transform: translateY(100px); opacity: 0; transition: all 0.3s; z-index: 1000; }
+        #toast.show { transform: translateY(0); opacity: 1; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">
+            <i class="ri-building-4-fill"></i>
+            <span>Wholesaler Hub</span>
+        </div>
+
+        <nav>
+            <div class="nav-item active" data-tab="orders" onclick="switchTab('orders')">
+                <i class="ri-inbox-archive-line"></i> Orders
+                <span id="nav-badge-orders" style="display:none; background:var(--danger); color:white; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; margin-left:auto;">0</span>
+            </div>
+            <div class="nav-item" data-tab="shops" onclick="switchTab('shops')">
+                <i class="ri-store-2-line"></i> My Shops
+            </div>
+            <div class="nav-item" data-tab="analytics" onclick="switchTab('analytics')">
+                <i class="ri-bar-chart-box-line"></i> Analytics
+            </div>
+            <div class="nav-item" data-tab="chat" onclick="switchTab('chat')">
+                <i class="ri-chat-3-line"></i> Chat
+                <span id="nav-badge-chat" style="display:none; background:var(--danger); color:white; padding:2px 8px; border-radius:10px; font-size:0.7rem; font-weight:700; margin-left:auto;">0</span>
+            </div>
+            
+            <a href="/logout" class="nav-item logout-btn" style="text-decoration: none; margin-top: 2rem;">
+                <i class="ri-logout-circle-r-line"></i> Logout
+            </a>
+        </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        
+        <!-- HEADER STATS -->
+        <div class="stats-bar" id="stats-bar">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-pending">—</div>
+                <div class="stat-label">Pending Orders</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total">—</div>
+                <div class="stat-label">Total Orders</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-done">—</div>
+                <div class="stat-label">Dispatched</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-top">—</div>
+                <div class="stat-label">Top Product</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-shops">—</div>
+                <div class="stat-label">Linked Shops</div>
+            </div>
+        </div>
+
+        <!-- VIEW: ORDERS -->
+        <div id="view-orders" class="tab-content active">
+            <div class="section-header">
+                <h2 class="section-title">Incoming Order Requests</h2>
+            </div>
+            <div class="order-filters">
+                <button class="filter-btn active" onclick="loadOrders('pending')">Pending</button>
+                <button class="filter-btn" onclick="loadOrders('confirmed')">Confirmed</button>
+                <button class="filter-btn" onclick="loadOrders('dispatched')">Dispatched</button>
+                <button class="filter-btn" onclick="loadOrders('rejected')">Rejected</button>
+            </div>
+            <div id="orders-list" class="orders-list">
+                <div class="empty-state"><i class="ri-loader-4-line ri-spin"></i> Loading orders...</div>
+            </div>
+        </div>
+
+        <!-- VIEW: SHOPS -->
+        <div id="view-shops" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Connected Shops</h2>
+                <button class="btn-action btn-dispatch" onclick="linkNewShop()">+ Link New Shop</button>
+            </div>
+            <div id="shops-grid" class="shops-grid">
+                <div class="empty-state"><i class="ri-loader-4-line ri-spin"></i> Loading shops...</div>
+            </div>
+        </div>
+
+        <!-- VIEW: ANALYTICS -->
+        <div id="view-analytics" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Business Analytics</h2>
+            </div>
+            <div class="analytics-grid">
+                <div class="chart-card">
+                    <h3 style="margin-bottom: 1rem; font-size: 1rem;">Daily Order Volume (Last 7 Days)</h3>
+                    <div class="chart-container">
+                        <canvas id="trend-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3 style="margin-bottom: 1rem; font-size: 1rem;">Top Products</h3>
+                    <div class="chart-container">
+                        <canvas id="product-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Shop Name</th>
+                            <th>Total Orders</th>
+                            <th>Total Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody id="top-shops-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VIEW: CHAT -->
+        <div id="view-chat" class="tab-content">
+            <div class="section-header">
+                <h2 class="section-title">Shop Communications</h2>
+            </div>
+            <div class="chat-layout">
+                <div class="chat-sidebar" id="chat-sidebar">
+                    <div class="chat-sidebar-header">Conversations</div>
+                    <div id="conversation-list" style="flex:1; overflow-y:auto;"></div>
+                </div>
+                <div class="chat-main" id="chat-main">
+                    <div id="chat-placeholder" style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); flex-direction:column; gap:1rem;">
+                        <i class="ri-chat-3-line" style="font-size:3rem; opacity:0.3;"></i>
+                        <span>Select a shop to view messages</span>
+                    </div>
+                    <div id="chat-window" style="display:none; flex-direction:column; height:100%; overflow:hidden;">
+                        <div class="chat-header" id="chat-partner-name">Shop Name</div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendChatMessage()" />
+                            <button class="btn-send" onclick="sendChatMessage()"><i class="ri-send-plane-fill"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="toast">Message</div>
+
+    <script>
+        // Global State
+        let currentTab = 'orders';
+        let currentOrderFilter = 'pending';
+        let chatSocket = null;
+        let activeConvId = null;
+        let chatJwt = null;
+        let currentUserId = null;
+        let productChart = null;
+        let trendsChart = null;
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        }
+
+        // --- Navigation ---
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelector(`.nav-item[data-tab="${tabName}"]`).classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${tabName}`).classList.add('active');
+            
+            currentTab = tabName;
+
+            if (tabName === 'orders') loadOrders(currentOrderFilter);
+            if (tabName === 'shops') loadShops();
+            if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'chat' && !chatSocket) initChat();
+        }
+
+        async function loadOrderSummaryCards() {
+            try {
+                const [analyticsRes, shopsRes] = await Promise.all([
+                    fetch('/api/wholesaler/analytics'),
+                    fetch('/api/wholesaler/shops')
+                ]);
+                const analytics = await analyticsRes.json();
+                const shops     = await shopsRes.json();
+
+                document.getElementById('stat-pending').textContent = analytics.summary.pending_orders;
+                document.getElementById('stat-total').textContent   = analytics.summary.total_orders;
+                document.getElementById('stat-done').textContent    = analytics.summary.dispatched;
+                document.getElementById('stat-top').textContent     = analytics.top_products[0]?.product || '—';
+                document.getElementById('stat-shops').textContent   = shops.shops?.length || 0;
+            } catch (e) { console.error('Error loading summary cards', e); }
+        }
+
+        // --- Orders Tab ---
+        let cachedOrders = null;
+        
+        async function loadOrders(status = 'pending', forceRefresh = false) {
+            currentOrderFilter = status;
+            
+            // Update filter buttons UI
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase() === status);
+            });
+
+            try {
+                if (!cachedOrders || forceRefresh) {
+                    // Fetch all orders from backend without status filter
+                    const res  = await fetch('/api/wholesaler/orders');
+                    const data = await res.json();
+                    cachedOrders = data.orders || [];
+                    
+                    // Update pending badge
+                    const pendingCount = cachedOrders.filter(o => o.status === 'pending').length;
+                    const badge = document.getElementById('nav-badge-orders');
+                    if (pendingCount > 0) {
+                        badge.textContent = pendingCount;
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+                
+                // Filter locally
+                const filteredOrders = cachedOrders.filter(o => o.status === status);
+                renderOrders(filteredOrders);
+                
+            } catch (e) { console.error('Failed to load orders', e); }
+        }
+
+        function renderOrders(orders) {
+            const container = document.getElementById('orders-list');
+            if (orders.length === 0) {
+                container.innerHTML = `<div class="empty-state">No ${currentOrderFilter} orders</div>`;
+                return;
+            }
+            container.innerHTML = orders.map(o => {
+                let itemsHtml = '';
+                if (o.product_name === 'Bulk Order' && o.items_json) {
+                    try {
+                        const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : o.items_json;
+                        let chips = '';
+                        if (Array.isArray(items)) {
+                            chips = items.map(item => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${item}</span>`).join('');
+                        } else {
+                            // Object format {name: qty}
+                            chips = Object.entries(items).map(([name, qty]) => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${name}: <b>${qty}</b></span>`).join('');
+                        }
+                        itemsHtml = `
+                            <div class="bulk-items-list" style="margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <div style="font-size: 0.85rem; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase;">Items in this order:</div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                    ${chips}
+                                </div>
+                                ${o.status === 'pending' ? `
+                                <button onclick="editBulkOrder(${o.id}, '${(typeof o.items_json === 'string' ? o.items_json : JSON.stringify(o.items_json)).replace(/'/g, "\\'")}')" 
+                                    style="margin-top: 10px; background: none; border: 1px dashed #4f46e5; color: #4f46e5; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                                    <i class="ri-edit-line"></i> Edit Items
+                                </button>` : ''}
+                            </div>
+                        `;
+                    } catch (e) { console.error('JSON parse error', e); }
+                }
+
+                return `
+                <div class="order-card" id="order-${o.id}">
+                    <div class="order-header">
+                        <div>
+                            <span class="order-badge ${o.status}">${o.status.toUpperCase()}</span>
+                            <span class="order-shop" style="margin-left: 10px;">🏪 ${escapeHtml(o.shop_name)}</span>
+                        </div>
+                        <span class="order-time">${new Date(o.created_at).toLocaleString()}</span>
+                    </div>
+                    <div class="order-product">
+                        <strong>${escapeHtml(o.product_name)}</strong>
+                        — Requested: <b>${o.requested_qty} ${o.unit || ''}</b>
+                        ${o.status !== 'pending' && o.confirmed_qty !== null ? ` | Confirmed: <b>${o.confirmed_qty}</b>` : ''}
+                    </div>
+                    ${itemsHtml}
+                    ${o.note ? `<div class="order-note">📝 ${escapeHtml(o.note)}</div>` : ''}
+                    
+                    ${o.status === 'pending' ? `
+                    <div class="order-actions">
+                        <input type="number" id="qty-${o.id}" value="${o.requested_qty}" min="1" style="width:80px;" placeholder="Qty" />
+                        <button onclick="orderAction(${o.id},'dispatch')" class="btn-action btn-dispatch">🚚 Dispatch</button>
+                        <button onclick="orderAction(${o.id},'reject')" class="btn-action btn-reject">❌ Reject</button>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        async function editBulkOrder(orderId, itemsJson) {
+            const currentItems = JSON.parse(itemsJson);
+            const newItemsStr = prompt("Edit items (comma separated):", currentItems.join(", "));
+            if (newItemsStr === null) return;
+            
+            const newItems = newItemsStr.split(",").map(s => s.trim()).filter(s => s.length > 0);
+            
+            try {
+                const res = await fetch(`/api/wholesaler/orders/${orderId}/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: newItems })
+                });
+                if (res.ok) {
+                    showToast("Order items updated!");
+                    loadOrders(currentOrderFilter, true);
+                }
+            } catch (e) { alert("Failed to edit order"); }
+        }
+
+        async function orderAction(orderId, action) {
+            const qtyInput = document.getElementById(`qty-${orderId}`);
+            const qty = qtyInput ? parseFloat(qtyInput.value) : null;
+            let note = '';
+            
+            if (action === 'reject') {
+                note = prompt('Reason for rejection (optional):') || '';
+            } else if (action === 'dispatch') {
+                note = prompt('Add a note for the shop (e.g. delivery time):') || '';
+            }
+
+            try {
+                const res = await fetch(`/api/wholesaler/orders/${orderId}/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, confirmed_qty: qty, note })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Order ${action}ed successfully!`);
+                    loadOrders(currentOrderFilter, true); // force refresh after action
+                    loadOrderSummaryCards();
+                } else {
+                    alert(data.error || 'Action failed');
+                }
+            } catch (e) { alert('Request failed'); }
+        }
+
+        function quickCreateOrder(convId, productName, qty) {
+            switchTab('orders');
+            // In a real app we might pre-fill a draft order form, but here we just prompt
+            alert(`Drafting order for ${productName} (Qty: ${qty}). This will appear in Pending once confirmed by shop.`);
+        }
+
+        // --- Shops Tab ---
+        async function loadShops() {
+            try {
+                const res  = await fetch('/api/wholesaler/shops');
+                const data = await res.json();
+                const grid = document.getElementById('shops-grid');
+                if (!data.shops || data.shops.length === 0) {
+                    grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No linked shops yet. Click "+ Link New Shop"</div>`;
+                    return;
+                }
+                grid.innerHTML = data.shops.map(s => `
+                    <div class="shop-card">
+                        <div class="shop-avatar">${(s.display_name || '?')[0].toUpperCase()}</div>
+                        <div class="shop-name">${escapeHtml(s.display_name)}</div>
+                        <div class="shop-meta">${escapeHtml(s.shop_name || '')}</div>
+                        <div class="shop-status ${s.last_active ? 'online' : 'offline'}">
+                            ${s.last_active ? '🟢 Active' : '🔴 No messages'}
+                        </div>
+                        ${s.pending_orders > 0 ? `<div class="shop-orders-badge">${s.pending_orders} pending orders</div>` : ''}
+                        <div class="shop-actions">
+                            <button onclick="openChatWithShop(${s.id})" class="btn-sm">💬 Chat</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) { console.error('Failed to load shops', e); }
+        }
+
+        async function linkNewShop() {
+            const username = prompt("Enter the shopkeeper's username to link:");
+            if (!username) return;
+            try {
+                const res = await fetch('/api/wholesaler/shops/link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shop_username: username.trim() })
+                });
+                const data = await res.json();
+                if (data.success) { 
+                    showToast('Shop linked successfully!'); 
+                    loadShops();
+                    loadOrderSummaryCards();
+                } else {
+                    alert(data.error || 'Failed to link shop');
+                }
+            } catch (e) { alert('Request failed'); }
+        }
+
+        function openChatWithShop(shopUserId) {
+            switchTab('chat');
+            setTimeout(async () => {
+                try {
+                    const res  = await fetch('/api/conversations/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ other_user_id: shopUserId })
+                    });
+                    const data = await res.json();
+                    if (data.conversation_id) {
+                        loadConversations();
+                        openConversation(data.conversation_id, `Shop #${shopUserId}`);
+                    }
+                } catch (e) { console.error(e); }
+            }, 300);
+        }
+
+        // --- Analytics Tab ---
+        async function loadAnalytics() {
+            try {
+                const res  = await fetch('/api/wholesaler/analytics');
+                const data = await res.json();
+
+                // Product Chart
+                const prodCtx = document.getElementById('product-chart').getContext('2d');
+                if (productChart) productChart.destroy();
+                productChart = new Chart(prodCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.top_products.map(p => p.product),
+                        datasets: [{
+                            label: 'Orders',
+                            data: data.top_products.map(p => p.order_count),
+                            backgroundColor: '#4f46e5',
+                            borderRadius: 6
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+
+                // Trend Chart
+                const trendCtx = document.getElementById('trend-chart').getContext('2d');
+                if (trendsChart) trendsChart.destroy();
+                trendsChart = new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.daily_orders.map(d => d.day.substring(5)),
+                        datasets: [{
+                            label: 'Orders',
+                            data: data.daily_orders.map(d => d.count),
+                            borderColor: '#10b981',
+                            tension: 0.3, fill: true,
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+
+                // Top Shops Table
+                const tbody = document.getElementById('top-shops-body');
+                tbody.innerHTML = data.top_shops.map((s, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td style="font-weight:500;">${escapeHtml(s.name)}</td>
+                        <td>${s.orders}</td>
+                        <td>${s.total_qty.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+                if (data.top_shops.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#64748b;">No data available yet.</td></tr>`;
+                }
+
+            } catch (e) { console.error('Failed to load analytics', e); }
+        }
+
+        // --- Chat Module ---
+        async function initChat() {
+            try {
+                const res = await fetch('/api/chat_token', { method: 'POST' });
+                const data = await res.json();
+                chatJwt = data.token;
+                currentUserId = data.user_id;
+
+                chatSocket = io({ query: { token: chatJwt } });
+
+                chatSocket.on('connect', () => {
+                    console.log('[Chat] Connected');
+                    loadConversations();
+                });
+
+                chatSocket.on('new_message', (msg) => {
+                    if (msg.conversation_id === activeConvId) {
+                        appendMessage(msg);
+                        chatSocket.emit('mark_read', { conversation_id: activeConvId });
+                    } else {
+                        incrementUnread(msg.conversation_id);
+                    }
+                });
+
+                chatSocket.on('new_order_alert', (data) => {
+                    showToast(`📦 New order from ${data.shop_name}: ${data.product_name}`);
+                    loadOrderSummaryCards();
+                    // Force refresh cache in background so badges and data stay up to date
+                    loadOrders(currentOrderFilter, true);
+                });
+
+                chatSocket.on('joined', (data) => loadMessages(data.conversation_id));
+            } catch (e) { console.error('Chat init failed', e); }
+        }
+
+        async function loadConversations() {
+            try {
+                const res  = await fetch('/api/conversations');
+                const data = await res.json();
+                const list = document.getElementById('conversation-list');
+                list.innerHTML = '';
+                let totalUnread = 0;
+
+                (data.conversations || []).forEach(conv => {
+                    totalUnread += conv.unread_count || 0;
+                    const item = document.createElement('div');
+                    item.className = 'conv-item';
+                    item.dataset.convId = conv.conversation_id;
+                    // Wholesaler sees the shop name instead of display name if desired, or just display_name
+                    item.innerHTML = `
+                        <div class="conv-name">${escapeHtml(conv.display_name)}</div>
+                        <div class="conv-preview">${escapeHtml(conv.shop_name || '')}</div>
+                        ${conv.unread_count > 0 ? `<div class="conv-unread">${conv.unread_count}</div>` : ''}
+                    `;
+                    item.onclick = () => openConversation(conv.conversation_id, conv.display_name);
+                    list.appendChild(item);
+                });
+
+                const badge = document.getElementById('nav-badge-chat');
+                if (totalUnread > 0) {
+                    badge.textContent = totalUnread;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) { console.error('Load convs failed', e); }
+        }
+
+        function openConversation(convId, partnerName) {
+            activeConvId = convId;
+            document.getElementById('chat-placeholder').style.display = 'none';
+            document.getElementById('chat-window').style.display = 'flex';
+            document.getElementById('chat-partner-name').textContent = partnerName;
+            document.getElementById('chat-messages').innerHTML = '';
+
+            document.querySelectorAll('.conv-item').forEach(el => {
+                const isActive = parseInt(el.dataset.convId) === convId;
+                el.classList.toggle('active', isActive);
+                if (isActive) {
+                    const badge = el.querySelector('.conv-unread');
+                    if (badge) badge.remove();
+                }
+            });
+
+            chatSocket.emit('join_conversation', { conversation_id: convId });
+        }
+
+        async function loadMessages(convId) {
+            try {
+                const res  = await fetch(`/api/conversations/${convId}/messages?limit=50`);
+                const data = await res.json();
+                const box  = document.getElementById('chat-messages');
+                box.innerHTML = '';
+                (data.messages || []).forEach(msg => appendMessage(msg, false));
+                box.scrollTop = box.scrollHeight;
+                chatSocket.emit('mark_read', { conversation_id: convId });
+            } catch (e) { console.error('Load messages failed', e); }
+        }
+
+        function appendMessage(msg, scroll = true) {
+            const box    = document.getElementById('chat-messages');
+            const isMine = msg.sender_id === currentUserId;
+            const div    = document.createElement('div');
+            const time   = new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            
+            let extraHtml = '';
+            if (msg.message_type === 'order_suggestion' && !isMine) {
+                const productMatch = msg.text.match(/LOW STOCK ALERT: (.+)/);
+                const qtyMatch     = msg.text.match(/Suggested order: ([\d.]+)/);
+                if (productMatch) {
+                    extraHtml = `
+                        <div style="margin-top:8px;">
+                            <button onclick="quickCreateOrder(${msg.conversation_id}, '${escapeHtml(productMatch[1])}', ${qtyMatch ? qtyMatch[1] : 0})" class="btn-create-order">📦 View Order Details</button>
+                        </div>`;
+                }
+            }
+
+            const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
+            div.className = `msg-bubble ${isMine ? 'mine' : 'theirs'} ${typeClass}`;
+            div.innerHTML  = `${escapeHtml(msg.text)}${extraHtml}<div class="msg-time">${time}</div>`;
+            box.appendChild(div);
+            if (scroll) box.scrollTop = box.scrollHeight;
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text  = input.value.trim();
+            if (!text || !activeConvId || !chatSocket) return;
+            chatSocket.emit('send_message', {
+                conversation_id: activeConvId,
+                text:            text,
+                message_type:    'text',
+            });
+            input.value = '';
+        }
+
+        function incrementUnread(convId) {
+            const item = document.querySelector(`.conv-item[data-conv-id="${convId}"]`);
+            if (item) {
+                let badge = item.querySelector('.conv-unread');
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'conv-unread';
+                    badge.textContent = '0';
+                    item.appendChild(badge);
+                }
+                badge.textContent = parseInt(badge.textContent) + 1;
+            }
+            const navBadge = document.getElementById('nav-badge-chat');
+            navBadge.textContent = (parseInt(navBadge.textContent) || 0) + 1;
+            navBadge.style.display = 'inline-block';
+        }
+
+        // Initial Load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOrderSummaryCards();
+            loadOrders('pending');
+            // Connect to chat socket behind the scenes to receive real-time alerts
+            initChat();
+        });
+    </script>
+</body>
+</html>
