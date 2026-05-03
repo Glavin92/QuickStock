@@ -1541,6 +1541,12 @@ def get_bulk_restock_history():
         'total_count': len(history)
     })
 
+@app.route('/history', methods=['GET'])
+def history():
+    """Get all transaction history for the history view"""
+    transactions = load_transactions_from_csv()
+    return jsonify(transactions[::-1])  # Return as list, most recent first
+
 @app.route('/pending_confirmations', methods=['GET'])
 @login_required
 def get_pending_confirmations():
@@ -1593,8 +1599,21 @@ def reject_action():
             pending_confirmations.pop(i)
             return jsonify({'success': True, 'message': 'Action rejected'})
     
-    
     return jsonify({'error': 'Action not found'}), 404
+
+@app.route('/set_voice_status', methods=['POST'])
+def set_voice_status():
+    """Update valid voice client connection status"""
+    global android_client_connected
+    data = request.get_json()
+    status = data.get('status')
+    
+    if status is not None:
+        android_client_connected = bool(status)
+        print(f"📡 Voice Status Updated: {'Online' if android_client_connected else 'Offline'}")
+        return jsonify({'success': True, 'status': android_client_connected})
+    
+    return jsonify({'error': 'Missing status'}), 400
 
 @app.route('/update_price', methods=['POST'])
 def update_price():

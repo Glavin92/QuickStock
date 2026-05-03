@@ -342,13 +342,17 @@ def process_pcm_streaming(pcm):
     
     return {"final": None, "final_hi": None, "final_en": None, "partial": None}
 
-def notify_flask_status(connected):
+def update_status(status):
+    """Notify app server about client connection status"""
     try:
         if _has_requests:
-            url = os.environ.get("FLASK_STATUS_URL", "http://127.0.0.1:5001/set_client_status")
-            requests.post(url, json={"connected": connected}, timeout=2)
-    except Exception as e:
-        print(f"⚠️ Could not notify Flask: {e}")
+            url = os.environ.get("APP_STATUS_URL", "http://127.0.0.1:5001/set_voice_status")
+            try:
+                requests.post(url, json={"status": status}, timeout=1)
+            except Exception:
+                pass # Fail silently
+    except Exception:
+        pass
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((HOST, PORT))
@@ -359,7 +363,7 @@ print(f"\n🎤 Voice Stream (continuous) running on {HOST}:{PORT}\n")
 while True:
     conn, addr = server.accept()
     print(f"✅ Android connected: {addr}")
-    notify_flask_status(True)
+    update_status(True) # Notify connected
     try:
         while True:
             chunk = conn.recv(4096)
@@ -374,5 +378,5 @@ while True:
         print("❌ Client disconnected or error:", e)
     finally:
         conn.close()
-        notify_flask_status(False)
+        update_status(False) # Notify disconnected
         print("🔌 Waiting for next client...\n")
