@@ -2,197 +2,337 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Bill - QuickStock</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+    <title>QuickStock — Billing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Outfit', sans-serif; background: #f1f5f9; }
+        .header { background: #111827; color: white; padding: 16px 28px;
+                  font-size: 20px; font-weight: 700; }
+        .layout { display: grid; grid-template-columns: 1fr 420px;
+                  gap: 24px; padding: 24px; max-width: 1400px; margin: auto; }
+
+        /* LEFT — Bill Builder */
+        .card { background: white; border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,.07); padding: 24px; }
+        .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px;
+                   color: #111; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+        input, select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+                        border-radius: 8px; font-size: 14px; font-family: inherit; }
+        input:focus, select:focus { outline: none; border-color: #2563eb; }
+        label { font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block; }
+
+        /* Item rows */
+        .item-row { display: grid; grid-template-columns: 2fr 80px 100px 100px 36px;
+                    gap: 8px; align-items: center; margin-bottom: 8px; }
+        .item-row input { font-size: 13px; }
+        .remove-btn { background: #fee2e2; border: none; color: #dc2626;
+                      border-radius: 6px; cursor: pointer; padding: 8px; font-size: 16px; }
+        .add-item-btn { background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb;
+                        border-radius: 8px; padding: 10px; width: 100%; cursor: pointer;
+                        font-size: 14px; font-weight: 600; margin: 8px 0 16px; }
+        .totals-box { background: #f9fafb; border-radius: 8px; padding: 14px; margin-top: 12px; }
+        .totals-row { display: flex; justify-content: space-between;
+                      font-size: 14px; margin-bottom: 6px; color: #374151; }
+        .totals-row.grand { font-weight: 700; font-size: 18px; color: #111; margin-top: 8px; }
+        .btn-primary { background: #2563eb; color: white; border: none;
+                       border-radius: 8px; padding: 14px; width: 100%; font-size: 15px;
+                       font-weight: 700; cursor: pointer; margin-top: 14px; }
+        .btn-primary:hover { background: #1e4fd4; }
+
+        /* RIGHT — Preview */
+        .preview-card { position: sticky; top: 24px; }
+        #bill-preview { font-size: 13px; }
+        .preview-header { text-align: center; margin-bottom: 12px; }
+        .preview-header h3 { font-size: 18px; font-weight: 700; }
+        .preview-header p { color: #6b7280; font-size: 12px; }
+        .preview-divider { border: none; border-top: 1px dashed #d1d5db; margin: 10px 0; }
+        .preview-items th { text-align: left; font-size: 12px;
+                            color: #6b7280; padding-bottom: 6px; }
+        .preview-items td { padding: 4px 0; font-size: 13px; }
+        .preview-items td:last-child { text-align: right; }
+        .preview-total-row { display: flex; justify-content: space-between;
+                             font-size: 13px; margin: 3px 0; }
+        .preview-grand { font-weight: 700; font-size: 16px; margin-top: 6px; }
+        .preview-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .btn-print { flex: 1; background: #111827; color: white; border: none;
+                     border-radius: 8px; padding: 12px; font-size: 14px;
+                     font-weight: 600; cursor: pointer; }
+        .btn-save { flex: 1; background: #16a34a; color: white; border: none;
+                    border-radius: 8px; padding: 12px; font-size: 14px;
+                    font-weight: 600; cursor: pointer; }
+
+        /* PRINT STYLES — only bill receipt shows when printing */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-bill, #printable-bill * { visibility: visible; }
+            #printable-bill { position: absolute; top: 0; left: 0; width: 80mm;
+                              font-family: monospace; font-size: 12px; padding: 10px; }
+        }
+    </style>
 </head>
-<body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Create New Bill</h1>
-            <a href="/dashboard" class="text-blue-600 hover:underline">Back to Dashboard</a>
+<body>
+<div class="header">🧾 QuickStock — New Bill</div>
+
+<div class="layout">
+    <!-- LEFT: Bill Builder -->
+    <div>
+        <div class="card" style="margin-bottom:16px">
+            <h2>Customer Details</h2>
+            <div class="form-row">
+                <div>
+                    <label>Customer Name (optional)</label>
+                    <input type="text" id="cust-name" placeholder="Walk-in Customer">
+                </div>
+                <div>
+                    <label>Phone (optional)</label>
+                    <input type="tel" id="cust-phone" placeholder="9XXXXXXXXX">
+                </div>
+            </div>
+            <div class="form-row">
+                <div>
+                    <label>Payment Mode</label>
+                    <select id="payment-mode">
+                        <option value="cash">💵 Cash</option>
+                        <option value="upi">📱 UPI</option>
+                        <option value="card">💳 Card</option>
+                    </select>
+                </div>
+                <div>
+                    <label>GST %</label>
+                    <input type="number" id="gst-percent" value="18" min="0" max="28" oninput="updatePreview()">
+                </div>
+            </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Left: Bill Form -->
-            <div class="lg:col-span-2 space-y-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm space-y-4">
-                    <h2 class="text-xl font-semibold mb-4">Customer Details</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" id="customer_name" placeholder="Customer Name" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                        <input type="tel" id="customer_phone" placeholder="Customer Phone" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                    </div>
-                </div>
+        <div class="card">
+            <h2>Items</h2>
+            <div class="item-row" style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:4px">
+                <span>Product</span><span>Qty</span><span>Unit</span><span>Price</span><span></span>
+            </div>
+            <div id="items-container"></div>
+            <button class="add-item-btn" onclick="addItemRow()">＋ Add Item</button>
 
-                <div class="bg-white p-6 rounded-xl shadow-sm">
-                    <h2 class="text-xl font-semibold mb-4">Add Items</h2>
-                    <div class="flex gap-2 mb-6">
-                        <select id="product_select" class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                            <option value="">Select Product</option>
-                            {% for name, prod in products.items() %}
-                            <option value="{{ name }}" data-price="{{ prod.price }}" data-unit="{{ prod.unit }}">
-                                {{ name }} (₹{{ prod.price }}/{{ prod.unit }})
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <input type="number" id="item_qty" value="1" min="0.1" step="0.1" class="w-24 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                        <button onclick="addItem()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                            Add
-                        </button>
-                    </div>
-
-                    <table class="w-full">
-                        <thead>
-                            <tr class="text-left border-bottom border-gray-100">
-                                <th class="py-2">Product</th>
-                                <th class="py-2 text-center">Qty</th>
-                                <th class="py-2 text-right">Price</th>
-                                <th class="py-2 text-right">Total</th>
-                                <th class="py-2"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="bill_items_body">
-                            <!-- Items added here -->
-                        </tbody>
-                    </table>
-                </div>
+            <div>
+                <label>Discount (₹)</label>
+                <input type="number" id="discount" value="0" min="0" oninput="updatePreview()" style="width:160px">
             </div>
 
-            <!-- Right: Summary -->
-            <div class="lg:col-span-1">
-                <div class="bg-white p-6 rounded-xl shadow-sm sticky top-8">
-                    <h2 class="text-xl font-semibold mb-6 text-gray-800">Bill Summary</h2>
-                    <div class="space-y-4">
-                        <div class="flex justify-between text-gray-600">
-                            <span>Subtotal</span>
-                            <span id="summary_subtotal">₹0.00</span>
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-gray-600">Discount</span>
-                            <input type="number" id="bill_discount" value="0" onchange="updateSummary()" class="w-24 px-2 py-1 border rounded text-right">
-                        </div>
-                        <div class="flex justify-between items-center gap-4">
-                            <span class="text-gray-600">GST %</span>
-                            <input type="number" id="bill_gst_percent" value="0" onchange="updateSummary()" class="w-24 px-2 py-1 border rounded text-right">
-                        </div>
-                        <div class="pt-4 border-t border-gray-100 flex justify-between font-bold text-xl">
-                            <span>Total</span>
-                            <span id="summary_total" class="text-blue-600">₹0.00</span>
-                        </div>
-                        
-                        <div class="space-y-2 pt-4">
-                            <label class="text-sm font-semibold text-gray-600">Payment Method</label>
-                            <select id="payment_method" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="cash">Cash</option>
-                                <option value="upi">UPI/Online</option>
-                                <option value="credit">Credit/Udhaar</option>
-                            </select>
-                        </div>
-
-                        <button onclick="submitBill()" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-bold text-lg mt-6 flex items-center justify-center gap-2">
-                            <i class="ri-checkbox-circle-line"></i> Generate Bill
-                        </button>
-                    </div>
-                </div>
+            <div class="totals-box" id="totals-box">
+                <div class="totals-row"><span>Subtotal</span><span id="t-subtotal">₹0.00</span></div>
+                <div class="totals-row"><span>Discount</span><span id="t-discount">-₹0.00</span></div>
+                <div class="totals-row"><span>GST (<span id="t-gst-pct">18</span>%)</span><span id="t-gst">₹0.00</span></div>
+                <hr style="border-top:1px solid #e5e7eb;margin:8px 0">
+                <div class="totals-row grand"><span>Total</span><span id="t-total">₹0.00</span></div>
             </div>
+
+            <button class="btn-primary" onclick="saveBill()">
+                <i class="ri-save-line"></i> Save Bill & Update Inventory
+            </button>
         </div>
     </div>
 
-    <script>
-        let billItems = [];
+    <!-- RIGHT: Live Preview -->
+    <div class="preview-card">
+        <div class="card">
+            <h2>Live Preview</h2>
+            <div id="bill-preview">
+                <div class="preview-header">
+                    <h3 id="prev-shopname">Your Shop</h3>
+                    <p id="prev-shopaddr"></p>
+                    <p id="prev-shopphone"></p>
+                </div>
+                <hr class="preview-divider">
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                    <span>Bill: <strong id="prev-billno">DRAFT</strong></span>
+                    <span id="prev-date"></span>
+                </div>
+                <div style="font-size:12px;margin-bottom:8px">
+                    Customer: <span id="prev-cust">Walk-in</span>
+                </div>
+                <hr class="preview-divider">
+                <table class="preview-items" width="100%">
+                    <thead>
+                        <tr>
+                            <th>Item</th><th>Qty</th><th style="text-align:right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="prev-items"></tbody>
+                </table>
+                <hr class="preview-divider">
+                <div class="preview-total-row"><span>Subtotal</span><span id="pv-sub">₹0</span></div>
+                <div class="preview-total-row"><span>Discount</span><span id="pv-disc">-₹0</span></div>
+                <div class="preview-total-row"><span>GST</span><span id="pv-gst">₹0</span></div>
+                <hr class="preview-divider">
+                <div class="preview-total-row preview-grand">
+                    <span>TOTAL</span><span id="pv-total">₹0</span>
+                </div>
+                <div style="text-align:center;margin-top:12px;font-size:11px;color:#9ca3af">
+                    Thank you! Visit Again 🙏
+                </div>
+            </div>
 
-        function addItem() {
-            const select = document.getElementById('product_select');
-            const qtyInput = document.getElementById('item_qty');
-            
-            if (!select.value) return;
+            <div class="preview-actions">
+                <button class="btn-print" onclick="printBill()">🖨️ Print</button>
+                <button class="btn-save" onclick="saveBill()">💾 Save</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-            const option = select.options[select.selectedIndex];
-            const item = {
-                product: select.value,
-                qty: parseFloat(qtyInput.value),
-                unit: option.dataset.unit,
-                price: parseFloat(option.dataset.price)
-            };
+<!-- Hidden printable receipt (80mm thermal format) -->
+<div id="printable-bill" style="display:none"></div>
 
-            billItems.push(item);
-            renderItems();
-            updateSummary();
-            
-            // Reset input
-            select.value = "";
-            qtyInput.value = 1;
-        }
+<script>
+let inventory = {};
+let savedBillId = null;
 
-        function removeItem(index) {
-            billItems.splice(index, 1);
-            renderItems();
-            updateSummary();
-        }
+// Load inventory for autocomplete
+async function loadInventory() {
+    const res = await fetch('/inventory');
+    const data = await res.json();
+    inventory = data.products || {};
+    // set shop info in preview
+    document.getElementById('prev-shopname').textContent = '{{ session.get("shop", "QuickStock") }}';
+    document.getElementById('prev-date').textContent = new Date().toLocaleDateString('en-IN');
+}
 
-        function renderItems() {
-            const body = document.getElementById('bill_items_body');
-            body.innerHTML = billItems.map((item, index) => `
-                <tr class="border-t border-gray-50">
-                    <td class="py-3 font-medium">${item.product}</td>
-                    <td class="py-3 text-center text-gray-600">${item.qty} ${item.unit}</td>
-                    <td class="py-3 text-right text-gray-600">₹${item.price}</td>
-                    <td class="py-3 text-right font-bold">₹${(item.qty * item.price).toFixed(2)}</td>
-                    <td class="py-3 text-right">
-                        <button onclick="removeItem(${index})" class="text-red-500 hover:text-red-700">
-                            <i class="ri-delete-bin-line"></i>
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
-        }
+function addItemRow(product='', qty=1, unit='', price=0) {
+    const container = document.getElementById('items-container');
+    const row = document.createElement('div');
+    row.className = 'item-row';
 
-        function updateSummary() {
-            const subtotal = billItems.reduce((sum, item) => sum + (item.qty * item.price), 0);
-            const discount = parseFloat(document.getElementById('bill_discount').value) || 0;
-            const gstPercent = parseFloat(document.getElementById('bill_gst_percent').value) || 0;
-            
-            const gstAmount = subtotal * (gstPercent / 100);
-            const total = subtotal - discount + gstAmount;
+    // Product autocomplete datalist
+    const productOptions = Object.keys(inventory).map(p => `<option value="${p}">`).join('');
 
-            document.getElementById('summary_subtotal').textContent = `₹${subtotal.toFixed(2)}`;
-            document.getElementById('summary_total').textContent = `₹${total.toFixed(2)}`;
-        }
+    row.innerHTML = `
+        <input type="text" placeholder="Product" class="item-product" list="product-list"
+               oninput="autofillPrice(this)" onchange="updatePreview()">
+        <input type="number" value="1" min="0.1" step="0.1" class="item-qty" oninput="updatePreview()">
+        <input type="text" placeholder="unit" class="item-unit" oninput="updatePreview()">
+        <input type="number" value="0" min="0" step="0.5" class="item-price" oninput="updatePreview()">
+        <button class="remove-btn" onclick="this.parentElement.remove(); updatePreview()">✕</button>
+    `;
+    container.appendChild(row);
 
-        async function submitBill() {
-            if (billItems.length === 0) {
-                alert('Please add at least one item');
-                return;
-            }
+    // Add shared datalist once
+    if (!document.getElementById('product-list')) {
+        const dl = document.createElement('datalist');
+        dl.id = 'product-list';
+        dl.innerHTML = productOptions;
+        document.body.appendChild(dl);
+    }
 
-            const data = {
-                customer_name: document.getElementById('customer_name').value || 'Walk-in Customer',
-                customer_phone: document.getElementById('customer_phone').value,
-                items: billItems,
-                discount: document.getElementById('bill_discount').value,
-                gst_percent: document.getElementById('bill_gst_percent').value,
-                payment_method: document.getElementById('payment_method').value
-            };
+    if (product) {
+        row.querySelector('.item-product').value = product;
+        row.querySelector('.item-qty').value = qty;
+        row.querySelector('.item-unit').value = unit;
+        row.querySelector('.item-price').value = price;
+    }
+    updatePreview();
+}
 
-            try {
-                const response = await fetch('/billing/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    window.location.href = `/billing/print/${result.bill_id}`;
-                } else {
-                    alert('Error: ' + result.error);
-                }
-            } catch (err) {
-                alert('Failed to generate bill');
-                console.error(err);
-            }
-        }
-    </script>
+function autofillPrice(input) {
+    const name = input.value.trim();
+    if (inventory[name]) {
+        const row = input.closest('.item-row');
+        row.querySelector('.item-price').value = inventory[name].price || 0;
+        row.querySelector('.item-unit').value = inventory[name].unit || '';
+        updatePreview();
+    }
+}
+
+function getItems() {
+    return [...document.querySelectorAll('.item-row')].map(row => ({
+        product: row.querySelector('.item-product').value.trim(),
+        quantity: parseFloat(row.querySelector('.item-qty').value) || 0,
+        unit: row.querySelector('.item-unit').value.trim(),
+        unit_price: parseFloat(row.querySelector('.item-price').value) || 0,
+        line_total: (parseFloat(row.querySelector('.item-qty').value)||0) *
+                    (parseFloat(row.querySelector('.item-price').value)||0)
+    })).filter(i => i.product && i.quantity > 0);
+}
+
+function updatePreview() {
+    const items = getItems();
+    const discount = parseFloat(document.getElementById('discount').value) || 0;
+    const gstPct = parseFloat(document.getElementById('gst-percent').value) || 0;
+    const subtotal = items.reduce((s, i) => s + i.line_total, 0);
+    const gstAmt = (subtotal - discount) * gstPct / 100;
+    const total = subtotal - discount + gstAmt;
+
+    // Update totals bar
+    document.getElementById('t-subtotal').textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById('t-discount').textContent = `-₹${discount.toFixed(2)}`;
+    document.getElementById('t-gst').textContent = `₹${gstAmt.toFixed(2)}`;
+    document.getElementById('t-gst-pct').textContent = gstPct;
+    document.getElementById('t-total').textContent = `₹${total.toFixed(2)}`;
+
+    // Update preview panel
+    document.getElementById('pv-sub').textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById('pv-disc').textContent = `-₹${discount.toFixed(2)}`;
+    document.getElementById('pv-gst').textContent = `₹${gstAmt.toFixed(2)}`;
+    document.getElementById('pv-total').textContent = `₹${total.toFixed(2)}`;
+    document.getElementById('prev-cust').textContent =
+        document.getElementById('cust-name').value || 'Walk-in';
+
+    const tbody = document.getElementById('prev-items');
+    tbody.innerHTML = items.map(i => `
+        <tr>
+            <td>${i.product}</td>
+            <td>${i.quantity} ${i.unit}</td>
+            <td style="text-align:right">₹${i.line_total.toFixed(2)}</td>
+        </tr>`).join('');
+}
+
+async function saveBill() {
+    const items = getItems();
+    if (!items.length) { alert('Add at least one item!'); return; }
+
+    const payload = {
+        customer_name: document.getElementById('cust-name').value,
+        customer_phone: document.getElementById('cust-phone').value,
+        payment_mode: document.getElementById('payment-mode').value,
+        gst_percent: parseFloat(document.getElementById('gst-percent').value) || 18,
+        discount: parseFloat(document.getElementById('discount').value) || 0,
+        items
+    };
+
+    const res = await fetch('/api/bill/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.success) {
+        savedBillId = data.bill_id;
+        document.getElementById('prev-billno').textContent = data.bill_number;
+        alert(`✅ Bill ${data.bill_number} saved! Total: ₹${data.total}`);
+    } else {
+        alert('Error: ' + (data.error || 'Unknown error'));
+    }
+}
+
+function printBill() {
+    const preview = document.getElementById('bill-preview').innerHTML;
+    const printable = document.getElementById('printable-bill');
+    printable.style.display = 'block';
+    printable.innerHTML = preview;
+    window.print();
+    printable.style.display = 'none';
+}
+
+// Init
+loadInventory();
+addItemRow();  // Start with one empty row
+
+// Live update customer name in preview
+document.addEventListener('input', e => {
+    if (e.target.id === 'cust-name') updatePreview();
+});
+</script>
 </body>
 </html>

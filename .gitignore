@@ -2,3 +2,4 @@
 /venv
 /vosk*
 .env
+/tools

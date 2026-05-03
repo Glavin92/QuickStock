@@ -470,7 +470,7 @@
             </div>
             <div id="nav-orders" class="nav-item" onclick="switchView('orders')">
                 <i class="ri-shopping-cart-2-line"></i>
-                <span>Pending Orders</span>
+                <span>Orders & Billing</span>
                 <span id="nav-orders-badge"
                     style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: auto; display: none;">0</span>
             </div>
@@ -621,16 +621,130 @@
             </div>
         </div>
 
-        <!-- VIEW 3: ORDERS -->
+        <!-- VIEW 3: ORDERS & BILLING -->
         <div id="view-orders" class="view-section">
-            <h3 style="margin-bottom: 1.5rem;">Pending Approvals</h3>
-            <div id="orders-list">
-                <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
-                    <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
-                    No pending orders found.
+            <!-- Tabs -->
+            <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb;">
+                <button id="tab-pending" class="order-tab active" onclick="switchOrderTab('pending')" style="padding: 12px 24px; font-weight: 600; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; color: #4f46e5; border-bottom-color: #4f46e5;">
+                    <i class="ri-time-line"></i> Pending Orders
+                </button>
+                <button id="tab-billing" class="order-tab" onclick="switchOrderTab('billing')" style="padding: 12px 24px; font-weight: 600; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; color: #6b7280;">
+                    <i class="ri-bill-line"></i> Create Bill
+                </button>
+            </div>
+
+            <!-- Pending Orders Tab Content -->
+            <div id="tab-content-pending" class="order-tab-content">
+                <h3 style="margin-bottom: 1.5rem;">Pending Approvals</h3>
+                <div id="orders-list">
+                    <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+                        <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
+                        No pending orders found.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Billing Tab Content -->
+            <div id="tab-content-billing" class="order-tab-content" style="display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 400px; gap: 24px;">
+                    <!-- LEFT: Bill Builder -->
+                    <div>
+                        <div class="glass-card" style="margin-bottom: 16px;">
+                            <h3 style="margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Customer Details</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                                <div>
+                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Customer Name (optional)</label>
+                                    <input type="text" id="cust-name" placeholder="Walk-in Customer" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Phone (optional)</label>
+                                    <input type="tel" id="cust-phone" placeholder="9XXXXXXXXX" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div>
+                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Payment Mode</label>
+                                    <select id="payment-mode" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                                        <option value="cash">Cash</option>
+                                        <option value="upi">UPI</option>
+                                        <option value="card">Card</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card">
+                            <h3 style="margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Items</h3>
+                            <div style="display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; color: #6b7280; font-weight: 600;">
+                                <span>Product</span><span>Qty</span><span>Unit</span><span>Price</span><span></span>
+                            </div>
+                            <div id="items-container"></div>
+                            <button onclick="addItemRow()" style="background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb; border-radius: 8px; padding: 10px; width: 100%; cursor: pointer; font-size: 14px; font-weight: 600; margin: 8px 0 16px;">+ Add Item</button>
+
+                            <div style="margin-bottom: 12px;">
+                                <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Discount (₹)</label>
+                                <input type="number" id="discount" value="0" min="0" oninput="updatePreview()" style="width: 160px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
+                            </div>
+
+                            <div style="background: #f9fafb; border-radius: 8px; padding: 14px; margin-top: 12px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: #374151;"><span>Subtotal</span><span id="t-subtotal">₹0.00</span></div>
+                                <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: #374151;"><span>Discount</span><span id="t-discount">-₹0.00</span></div>
+                                <hr style="border-top: 1px solid #e5e7eb; margin: 8px 0;">
+                                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; color: #111; margin-top: 8px;"><span>Total</span><span id="t-total">₹0.00</span></div>
+                            </div>
+
+                            <button onclick="saveBill()" style="background: #2563eb; color: white; border: none; border-radius: 8px; padding: 14px; width: 100%; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 14px;">
+                                <i class="ri-save-line"></i> Save Bill & Update Inventory
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Live Preview -->
+                    <div>
+                        <div class="glass-card" style="position: sticky; top: 24px;">
+                            <h3 style="margin-bottom: 16px;">Bill Preview</h3>
+                            <div id="bill-preview" style="font-size: 13px; background: white; border: 1px dashed #d1d5db; border-radius: 8px; padding: 20px;">
+                                <div style="text-align: center; margin-bottom: 12px;">
+                                    <h3 id="prev-shopname" style="font-size: 18px; font-weight: 700;">{{ session.get('shop', 'QuickStock') }}</h3>
+                                    <p id="prev-shopaddr" style="color: #6b7280; font-size: 12px;"></p>
+                                </div>
+                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                                    <span>Bill: <strong id="prev-billno">DRAFT</strong></span>
+                                    <span id="prev-date"></span>
+                                </div>
+                                <div style="font-size: 12px; margin-bottom: 8px;">Customer: <span id="prev-cust">Walk-in</span></div>
+                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
+                                <table width="100%" style="font-size: 13px;">
+                                    <thead>
+                                        <tr style="text-align: left; font-size: 12px; color: #6b7280;">
+                                            <th style="padding-bottom: 6px;">Item</th>
+                                            <th style="padding-bottom: 6px;">Qty</th>
+                                            <th style="padding-bottom: 6px; text-align: right;">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="prev-items"></tbody>
+                                </table>
+                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin: 3px 0;"><span>Subtotal</span><span id="pv-sub">₹0</span></div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin: 3px 0;"><span>Discount</span><span id="pv-disc">-₹0</span></div>
+                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
+                                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; margin-top: 6px;"><span>TOTAL</span><span id="pv-total">₹0</span></div>
+                                <div style="text-align: center; margin-top: 12px; font-size: 11px; color: #9ca3af;">Thank you! Visit Again</div>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; margin-top: 16px;">
+                                <button onclick="printBill()" style="flex: 1; background: #111827; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer;">🖨️ Print</button>
+                                <button onclick="saveBill()" style="flex: 1; background: #16a34a; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer;">💾 Save</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <!-- Hidden printable receipt -->
+        <div id="printable-bill" style="display: none;"></div>
 
         <!-- VIEW 3.5: WHOLESALER ORDERS -->
         <div id="view-wholesaler-orders" class="view-section">
@@ -1504,6 +1618,235 @@
             if (!text) return '';
             return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                        .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+        }
+
+        // --- Orders Tab Switching ---
+        function switchOrderTab(tab) {
+            document.querySelectorAll('.order-tab').forEach(el => {
+                el.classList.remove('active');
+                el.style.color = '#6b7280';
+                el.style.borderBottomColor = 'transparent';
+            });
+            document.querySelectorAll('.order-tab-content').forEach(el => el.style.display = 'none');
+
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.getElementById('tab-' + tab).style.color = '#4f46e5';
+            document.getElementById('tab-' + tab).style.borderBottomColor = '#4f46e5';
+            document.getElementById('tab-content-' + tab).style.display = 'block';
+
+            if (tab === 'billing') {
+                loadInventory();
+                loadCartFromPending();
+            }
+        }
+
+        // --- Billing System ---
+        let inventory = {};
+        let savedBillId = null;
+
+        async function loadInventory() {
+            const res = await fetch('/inventory');
+            const data = await res.json();
+            inventory = data.products || {};
+            document.getElementById('prev-date').textContent = new Date().toLocaleDateString('en-IN');
+        }
+
+        function addItemRow(product='', qty=1, unit='', price=0) {
+            const container = document.getElementById('items-container');
+            const row = document.createElement('div');
+            row.className = 'item-row';
+            row.style.cssText = 'display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; align-items: center; margin-bottom: 8px;';
+
+            const productOptions = Object.keys(inventory).map(p => `<option value="${p}">`).join('');
+
+            row.innerHTML = `
+                <input type="text" placeholder="Product" class="item-product" list="product-list"
+                       oninput="autofillPrice(this)" onchange="updatePreview()"
+                       style="padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                <input type="number" value="1" min="0.1" step="0.1" class="item-qty" oninput="updatePreview()"
+                       style="padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                <input type="text" placeholder="unit" class="item-unit" oninput="updatePreview()"
+                       style="padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                <input type="number" value="0" min="0" step="0.5" class="item-price" oninput="updatePreview()"
+                       style="padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                <button onclick="this.parentElement.remove(); updatePreview()"
+                        style="background: #fee2e2; border: none; color: #dc2626; border-radius: 6px; cursor: pointer; padding: 8px; font-size: 16px;">✕</button>
+            `;
+            container.appendChild(row);
+
+            if (!document.getElementById('product-list')) {
+                const dl = document.createElement('datalist');
+                dl.id = 'product-list';
+                dl.innerHTML = productOptions;
+                document.body.appendChild(dl);
+            }
+
+            if (product) {
+                row.querySelector('.item-product').value = product;
+                row.querySelector('.item-qty').value = qty;
+                row.querySelector('.item-unit').value = unit;
+                row.querySelector('.item-price').value = price;
+            }
+            updatePreview();
+        }
+
+        function autofillPrice(input) {
+            const name = input.value.trim();
+            if (inventory[name]) {
+                const row = input.closest('.item-row');
+                row.querySelector('.item-price').value = inventory[name].price || 0;
+                row.querySelector('.item-unit').value = inventory[name].unit || '';
+                updatePreview();
+            }
+        }
+
+        function getItems() {
+            return [...document.querySelectorAll('.item-row')].map(row => ({
+                product: row.querySelector('.item-product').value.trim(),
+                quantity: parseFloat(row.querySelector('.item-qty').value) || 0,
+                unit: row.querySelector('.item-unit').value.trim(),
+                unit_price: parseFloat(row.querySelector('.item-price').value) || 0,
+                line_total: (parseFloat(row.querySelector('.item-qty').value)||0) *
+                            (parseFloat(row.querySelector('.item-price').value)||0)
+            })).filter(i => i.product && i.quantity > 0);
+        }
+
+        function updatePreview() {
+            const items = getItems();
+            const discount = parseFloat(document.getElementById('discount').value) || 0;
+            const subtotal = items.reduce((s, i) => s + i.line_total, 0);
+            const total = Math.round((subtotal - discount) * 100) / 100;
+
+            // Update totals
+            document.getElementById('t-subtotal').textContent = `₹${subtotal.toFixed(2)}`;
+            document.getElementById('t-discount').textContent = `-₹${discount.toFixed(2)}`;
+            document.getElementById('t-total').textContent = `₹${total.toFixed(2)}`;
+
+            // Update preview
+            document.getElementById('pv-sub').textContent = `₹${subtotal.toFixed(2)}`;
+            document.getElementById('pv-disc').textContent = `-₹${discount.toFixed(2)}`;
+            document.getElementById('pv-total').textContent = `₹${total.toFixed(2)}`;
+            document.getElementById('prev-cust').textContent = document.getElementById('cust-name').value || 'Walk-in';
+
+            const tbody = document.getElementById('prev-items');
+            tbody.innerHTML = items.map(i => `
+                <tr>
+                    <td style="padding: 4px 0;">${i.product}</td>
+                    <td style="padding: 4px 0;">${i.quantity} ${i.unit}</td>
+                    <td style="padding: 4px 0; text-align: right;">₹${i.line_total.toFixed(2)}</td>
+                </tr>`).join('');
+        }
+
+        async function saveBill() {
+            const items = getItems();
+            if (!items.length) { alert('Add at least one item!'); return; }
+
+            const payload = {
+                customer_name: document.getElementById('cust-name').value,
+                customer_phone: document.getElementById('cust-phone').value,
+                payment_mode: document.getElementById('payment-mode').value,
+                discount: parseFloat(document.getElementById('discount').value) || 0,
+                items
+            };
+
+            const res = await fetch('/api/bill/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                savedBillId = data.bill_id;
+                document.getElementById('prev-billno').textContent = data.bill_number;
+                // Clear the live cart
+                await fetch('/billing/cart/clear', { method: 'POST' });
+                alert(`✅ Bill ${data.bill_number} saved! Total: ₹${data.total}`);
+                // Reset form
+                document.getElementById('items-container').innerHTML = '';
+                document.getElementById('cust-name').value = '';
+                document.getElementById('cust-phone').value = '';
+                document.getElementById('discount').value = '0';
+                addItemRow();
+                updatePreview();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        }
+
+        function printBill() {
+            const preview = document.getElementById('bill-preview').innerHTML;
+            const printable = document.getElementById('printable-bill');
+
+            // Inject print styles to hide everything except the printable receipt
+            let printStyles = document.getElementById('print-styles');
+            if (!printStyles) {
+                printStyles = document.createElement('style');
+                printStyles.id = 'print-styles';
+                printStyles.innerHTML = `
+                    @media print {
+                        body * { visibility: hidden !important; }
+                        #printable-bill, #printable-bill * { visibility: visible !important; }
+                        #printable-bill {
+                            position: absolute !important;
+                            left: 50% !important;
+                            top: 0 !important;
+                            transform: translateX(-50%) !important;
+                            width: 80mm !important;
+                            max-width: 80mm !important;
+                            padding: 10px !important;
+                            box-sizing: border-box !important;
+                            font-size: 13px !important;
+                        }
+                    }
+                `;
+                document.head.appendChild(printStyles);
+            }
+
+            printable.innerHTML = preview;
+            printable.style.display = 'block';
+            window.print();
+            printable.style.display = 'none';
+        }
+
+        // Live update customer name
+        document.addEventListener('input', e => {
+            if (e.target && e.target.id === 'cust-name') updatePreview();
+        });
+
+        // --- Load Cart from Pending Orders ---
+        async function loadCartFromPending() {
+            const res = await fetch('/billing/cart');
+            const cart = await res.json();
+
+            // Clear existing items
+            document.getElementById('items-container').innerHTML = '';
+
+            if (cart.items && cart.items.length > 0) {
+                // Pre-populate from confirmed orders
+                cart.items.forEach(item => {
+                    addItemRow(item.product, item.qty, item.unit, item.price);
+                });
+                updatePreview();
+
+                // Show notification banner
+                const banner = document.createElement('div');
+                banner.id = 'cart-banner';
+                banner.style.cssText = 'background: #dbeafe; border: 1px solid #3b82f6; color: #1e40af; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; display: flex; align-items: center; gap: 8px;';
+                banner.innerHTML = `<i class="ri-information-line" style="font-size: 18px;"></i> <strong>${cart.items.length} item(s)</strong> loaded from confirmed voice orders`;
+
+                const billingContent = document.getElementById('tab-content-billing');
+                billingContent.insertBefore(banner, billingContent.firstChild);
+
+                // Auto-remove banner after 5 seconds
+                setTimeout(() => {
+                    const b = document.getElementById('cart-banner');
+                    if (b) b.remove();
+                }, 5000);
+            } else {
+                // No items in cart, add empty row
+                addItemRow();
+            }
         }
 
         // Initial Load + start polling

@@ -526,6 +526,13 @@ os.makedirs('./test_audio_files', exist_ok=True)
 # Pending confirmations from voice input
 pending_confirmations = []
 
+# Live bill cart — accumulates confirmed items for billing
+live_bill_cart = {
+    "items": [],       # [{product, qty, unit, price}]
+    "discount": 0,
+    "payment_mode": "cash"
+}
+
 # Global status of Android Client
 android_client_connected = False
 
@@ -1556,10 +1563,11 @@ def process_text_command(text, apply=True):
         else:
             if old_stock >= quantity:
                 new_stock = old_stock - quantity
+                is_low = False
                 if apply:
-                    update_product_stock_in_db(product_key, new_stock)
+                    is_low = update_product_stock_in_db(product_key, new_stock)
                     log_transaction_in_db('sale', product_key, quantity, display_unit, old_stock=old_stock, new_stock=new_stock)
-                    
+
                     print(f"SOLD: {quantity} {display_unit} {product_key}. New stock: {new_stock} {current_products[product_key]['unit']}")
                 return {
                     'action': 'sale',
@@ -1897,28 +1905,67 @@ def get_pending_confirmations():
 @login_required
 def confirm_action():
     """Confirm a pending action by ID"""
+    global live_bill_cart
     data = request.get_json()
     action_id = data.get('id')
-    
+
     if action_id is None:
         return jsonify({'error': 'Missing action ID'}), 400
-    
+
     # Find the pending action
     pending = None
     for i, p in enumerate(pending_confirmations):
         if p['id'] == action_id:
             pending = pending_confirmations.pop(i)
             break
-    
+
     if not pending:
         return jsonify({'error': 'Action not found or already processed'}), 404
-    
+
     # Re-process with apply=True
     nlu_result = process_text_command(pending['preprocessed_text'], apply=True)
-    
+
+    # Push sale items to live bill cart
+    if nlu_result.get('action') in ('sale', 'multi_sale'):
+        current_products = get_all_products_db()
+
+        if nlu_result.get('action') == 'sale' and nlu_result.get('product'):
+            # Single product sale
+            product_key = nlu_result['product']
+            item = {
+                'product': product_key,
+                'qty': nlu_result.get('quantity', 1),
+                'unit': nlu_result.get('unit', 'unit'),
+                'price': current_products.get(product_key, {}).get('price', 0)
+            }
+            # Merge if product already in cart
+            existing = next((x for x in live_bill_cart['items'] if x['product'] == item['product']), None)
+            if existing:
+                existing['qty'] += item['qty']
+            else:
+                live_bill_cart['items'].append(item)
+
+        elif nlu_result.get('action') == 'multi_sale' and nlu_result.get('items'):
+            # Multi-product sale
+            for sale_item in nlu_result['items']:
+                product_key = sale_item.get('product')
+                item = {
+                    'product': product_key,
+                    'qty': sale_item.get('quantity', 1),
+                    'unit': sale_item.get('unit', 'unit'),
+                    'price': current_products.get(product_key, {}).get('price', 0)
+                }
+                # Merge if product already in cart
+                existing = next((x for x in live_bill_cart['items'] if x['product'] == item['product']), None)
+                if existing:
+                    existing['qty'] += item['qty']
+                else:
+                    live_bill_cart['items'].append(item)
+
     return jsonify({
         'success': True,
-        'result': nlu_result
+        'result': nlu_result,
+        'cart_items': len(live_bill_cart['items'])
     })
 
 @app.route('/reject_action', methods=['POST'])
@@ -2598,33 +2645,14 @@ def get_dashboard_stats():
     """Returns aggregated stats: Revenue, Low Stock, Pending, Client Status, and Revenue History."""
     
     today_str = date.today().isoformat() # YYYY-MM-DD
-    revenue_by_date = {} # {'2026-02-16': 384.0, ...}
     
     current_products = get_all_products_db()
     
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT t.product_name, t.quantity, t.transaction_type, t.timestamp, p.price FROM transactions t JOIN products p ON t.product_name = p.name")
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        
-        for r in rows:
-            product_name = r[0]
-            quantity = r[1]
-            transaction_type = r[2]
-            ts = r[3]
-            price = r[4] or 0
-            
-            date_part = ts.strftime('%Y-%m-%d')
-            
-            if transaction_type == 'sale':
-                amount = float(quantity) * float(price)
-                revenue_by_date[date_part] = revenue_by_date.get(date_part, 0) + amount
-    except Exception as e:
-        print(f"Error calc revenue: {e}")
-
+    # Use bills table for revenue via get_product_sales_trend
+    shop_id = session.get('user_id')
+    trend = get_product_sales_trend(shop_id, days=7)
+    revenue_by_date = {t['date']: t['total'] for t in trend}
+    
     today_revenue = revenue_by_date.get(today_str, 0)
     
     # --- PRO TIP: Demo Data Fallback for "Wow Factor" ---
@@ -3779,6 +3807,160 @@ def api_edit_bulk_order(order_id):
     conn.commit()
     cur.close(); conn.close()
     return jsonify({'success': True})
+
+# --- Billing System Routes ---
+
+def generate_bill_number():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT nextval('bill_number_seq')")
+    except Exception:
+        # Sequence doesn't exist, create it
+        conn.rollback()
+        cur.execute("CREATE SEQUENCE IF NOT EXISTS bill_number_seq START 1")
+        conn.commit()
+        cur.execute("SELECT nextval('bill_number_seq')")
+    seq = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return f"QS-{datetime.now().year}-{str(seq).zfill(5)}"
+
+@app.route('/api/bill/create', methods=['POST'])
+@login_required
+def create_bill():
+    data = request.get_json(silent=True) or {}
+    shop_id = session.get('user_id')
+    items = data.get('items', [])  # [{product, quantity, unit, unit_price}]
+
+    if not items:
+        return jsonify({"error": "No items in bill"}), 400
+
+    customer_name = data.get('customer_name', '').strip()
+    customer_phone = data.get('customer_phone', '').strip()
+    discount = float(data.get('discount', 0))
+    payment_mode = data.get('payment_mode', 'cash')
+    notes = data.get('notes', '')
+
+    # Calculate totals (no GST)
+    subtotal = sum(float(i['quantity']) * float(i['unit_price']) for i in items)
+    gst_percent = 0
+    gst_amount = 0
+    total = round(subtotal - discount, 2)
+    bill_number = generate_bill_number()
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Ensure columns exist (migrations)
+        cur.execute("ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_mode VARCHAR(20) DEFAULT 'cash'")
+        cur.execute("ALTER TABLE bills ADD COLUMN IF NOT EXISTS notes TEXT")
+        conn.commit()
+
+        cur.execute("""
+            INSERT INTO bills (shop_id, bill_number, customer_name, customer_phone,
+                subtotal, discount, gst_percent, gst_amount, total, payment_mode, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        """, (shop_id, bill_number, customer_name, customer_phone,
+              subtotal, discount, gst_percent, gst_amount, total, payment_mode, notes))
+        bill_id = cur.fetchone()[0]
+
+        # Ensure bill_items columns exist (clean up old schema)
+        cur.execute("ALTER TABLE bill_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(10,2)")
+        cur.execute("ALTER TABLE bill_items ADD COLUMN IF NOT EXISTS line_total NUMERIC(10,2)")
+        # Migrate data from old price_per_unit to new unit_price, then drop old column
+        try:
+            cur.execute("UPDATE bill_items SET unit_price = price_per_unit WHERE unit_price IS NULL AND price_per_unit IS NOT NULL")
+            cur.execute("UPDATE bill_items SET price_per_unit = unit_price WHERE price_per_unit IS NULL AND unit_price IS NOT NULL")
+            cur.execute("ALTER TABLE bill_items ALTER COLUMN price_per_unit DROP NOT NULL")
+        except Exception:
+            conn.rollback()
+        conn.commit()
+
+        for item in items:
+            line_total = round(float(item['quantity']) * float(item['unit_price']), 2)
+            cur.execute("""
+                INSERT INTO bill_items (bill_id, product_name, quantity, unit, unit_price, line_total)
+                VALUES (%s,%s,%s,%s,%s,%s)
+            """, (bill_id, item['product'], item['quantity'],
+                  item.get('unit',''), item['unit_price'], line_total))
+
+            # Deduct from inventory automatically
+            cur.execute("UPDATE products SET current_stock = current_stock - %s WHERE name = %s",
+                        (item['quantity'], item['product']))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        cur.close(); conn.close()
+        return jsonify({"error": str(e)}), 500
+
+    cur.close(); conn.close()
+    return jsonify({"success": True, "bill_id": bill_id, "bill_number": bill_number, "total": total})
+
+@app.route('/api/bill/<int:bill_id>', methods=['GET'])
+@login_required
+def get_bill(bill_id):
+    shop_id = session.get('user_id')
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT b.*, s.shop_name, s.address, s.phone
+        FROM bills b JOIN shops s ON s.id = b.shop_id
+        WHERE b.id = %s AND b.shop_id = %s
+    """, (bill_id, shop_id))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return jsonify({"error": "Bill not found"}), 404
+
+    cur.execute("SELECT * FROM bill_items WHERE bill_id = %s", (bill_id,))
+    items = cur.fetchall()
+    cur.close(); conn.close()
+
+    return jsonify({
+        "id": row[0], "bill_number": row[2],
+        "customer_name": row[3], "customer_phone": row[4],
+        "subtotal": row[5], "discount": row[6],
+        "gst_percent": row[7], "gst_amount": row[8],
+        "total": row[9], "payment_mode": row[10],
+        "notes": row[11], "created_at": str(row[12]),
+        "shop_name": row[13], "shop_address": row[14], "shop_phone": row[15],
+        "items": [{"product_name": i[2], "quantity": i[3],
+                   "unit": i[4], "unit_price": i[5], "line_total": i[6]} for i in items]
+    })
+
+@app.route('/api/bills', methods=['GET'])
+@login_required
+def get_bills():
+    shop_id = session.get('user_id')
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, bill_number, customer_name, total, payment_mode, created_at
+        FROM bills WHERE shop_id = %s ORDER BY created_at DESC LIMIT 50
+    """, (shop_id,))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify(bills=[{
+        "id": r[0], "bill_number": r[1], "customer_name": r[2] or "Walk-in",
+        "total": r[3], "payment_mode": r[4], "created_at": str(r[5])
+    } for r in rows])
+
+@app.route('/billing/cart', methods=['GET'])
+@login_required
+def get_bill_cart():
+    """Get current live bill cart items"""
+    return jsonify(live_bill_cart)
+
+@app.route('/billing/cart/clear', methods=['POST'])
+@login_required
+def clear_bill_cart():
+    """Clear the live bill cart after bill is generated"""
+    live_bill_cart["items"] = []
+    live_bill_cart["discount"] = 0
+    live_bill_cart["payment_mode"] = "cash"
+    return jsonify({"success": True})
 
 if __name__ == '__main__':
     import eventlet
