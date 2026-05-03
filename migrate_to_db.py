@@ -3,6 +3,7 @@ import csv
 from datetime import datetime
 import psycopg2
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash
 
 load_dotenv()
 
@@ -59,6 +60,17 @@ def migrate():
             new_stock FLOAT
         );
     """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL DEFAULT 'shop',
+            shop_name VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
     conn.commit()
 
     # 2. Seed Products
@@ -74,6 +86,20 @@ def migrate():
                 base_unit = EXCLUDED.base_unit,
                 price = EXCLUDED.price;
         """, (name, data['current_stock'], data['threshold'], data['unit'], data['base_unit'], data['price']))
+    
+    # 2.1 Seed Users
+    print("Seeding users...")
+    initial_users = [
+        ("admin", "quickstock2026", "admin", "QuickStock HQ"),
+        ("shop_shrey", "shrey2026", "shop", "Shrey Mart - Mumbai")
+    ]
+    for username, password, role, shop in initial_users:
+        cur.execute("""
+            INSERT INTO users (username, password_hash, role, shop_name)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (username) DO NOTHING;
+        """, (username, generate_password_hash(password), role, shop))
+    
     conn.commit()
     
     # 3. Seed Transactions from CSV

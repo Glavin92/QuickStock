@@ -463,7 +463,12 @@
             <div class="glass-card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <h3>All Products</h3>
-                    <button class="btn" style="background:#f1f5f9;" onclick="loadData()">🔄 Refresh</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-success" onclick="showAddProductModal()">
+                            <i class="ri-add-line"></i> Add Product
+                        </button>
+                        <button class="btn" style="background:#f1f5f9;" onclick="loadData()">🔄 Refresh</button>
+                    </div>
                 </div>
                 <div class="table-wrap">
                     <table id="inventory-table">
@@ -474,7 +479,7 @@
                                 <th>Unit</th>
                                 <th>Price/Unit</th>
                                 <th>Status</th>
-                                <th>Forecast</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="inventory-tbody">
@@ -543,27 +548,48 @@
 
     </main>
 
-    <!-- Modal -->
-    <div id="revenue-modal" class="modal-overlay" onclick="if(event.target === this) closeRevenueModal()">
+    </div>
+
+    <!-- Add Product Modal -->
+    <div id="add-product-modal" class="modal-overlay" onclick="if(event.target === this) closeAddProductModal()">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-                <h3>Revenue Breakdown</h3>
-                <button onclick="closeRevenueModal()"
-                    style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+                <h3>Add New Product</h3>
+                <button onclick="closeAddProductModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
             </div>
-            <div style="max-height: 400px; overflow-y: auto;">
-                <table style="width:100%;">
-                    <thead>
-                        <tr style="text-align:left; border-bottom:1px solid #eee;">
-                            <th style="padding:0.5rem; background:white;">Date</th>
-                            <th style="padding:0.5rem; background:white; text-align:right;">Daily Total</th>
-                        </tr>
-                    </thead>
-                    <tbody id="revenue-modal-body">
-                        <!-- Filled by JS -->
-                    </tbody>
-                </table>
-            </div>
+            <form id="add-product-form" onsubmit="event.preventDefault(); submitAddProduct();">
+                <div style="margin-bottom: 1rem;">
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Product Name (Hindi preferred)</label>
+                    <input type="text" id="new-prod-name" required style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Initial Stock</label>
+                        <input type="number" id="new-prod-stock" required value="0" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Price (₹)</label>
+                        <input type="number" id="new-prod-price" required value="0" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Unit</label>
+                        <select id="new-prod-unit" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
+                            <option value="पैकेट">पैकेट (Packet)</option>
+                            <option value="किलो">किलो (Kg)</option>
+                            <option value="लीटर">लीटर (Liter)</option>
+                            <option value="बोतल">बोतल (Bottle)</option>
+                            <option value="पीस">पीस (Piece)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Threshold</label>
+                        <input type="number" id="new-prod-threshold" required value="5" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success" style="width:100%; justify-content:center; padding:1rem;">Create Product</button>
+            </form>
         </div>
     </div>
 
@@ -638,6 +664,13 @@
                     } else {
                         navBadge.style.display = 'none';
                     }
+
+                    // Update Charts with real data
+                    if (stats.revenue_history) {
+                        const labels = Object.keys(stats.revenue_history).sort();
+                        const data = labels.map(l => stats.revenue_history[l]);
+                        initCharts(labels, data);
+                    }
                 }
             } catch (e) {
                 console.error("Stats fetch failed:", e);
@@ -708,14 +741,7 @@
                             let statusHtml = '';
                             let forecastHtml = 'Stable';
 
-                            if (stock <= thresh) {
-                                statusHtml = `<span class="status-chip chip-danger">Critical</span>`;
-                                forecastHtml = `<span style="color:#ef4444; font-weight:600;">Refill ASAP</span>`;
-                            } else if (stock <= thresh * 1.5) {
-                                statusHtml = `<span class="status-chip chip-warning">Low</span>`;
-                            } else {
-                                statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
-                                forecastHtml = `<span style="color:#64748b;">Good</span>`;
+                                 statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
                             }
 
                             let inputValue = price === 0 ? '' : price;
@@ -732,7 +758,11 @@
                                         />
                                     </td>
                                     <td>${statusHtml}</td>
-                                    <td>${forecastHtml}</td>
+                                    <td>
+                                        <button class="btn" style="color:#ef4444; background:none; padding:0;" onclick="deleteProduct('${key}')">
+                                            <i class="ri-delete-bin-line"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                             `;
                         }
@@ -764,19 +794,25 @@
         }
 
         // --- Charts ---
-        function initCharts() {
+        let salesChartInstance = null;
+        function initCharts(labels = [], data = []) {
             const ctx = document.getElementById('salesChart').getContext('2d');
+            
+            if (salesChartInstance) {
+                salesChartInstance.destroy();
+            }
+
             const gradient = ctx.createLinearGradient(0, 0, 0, 400);
             gradient.addColorStop(0, 'rgba(79, 70, 229, 0.4)');
             gradient.addColorStop(1, 'rgba(79, 70, 229, 0.0)');
 
-            new Chart(ctx, {
+            salesChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    labels: labels.length ? labels : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                     datasets: [{
-                        label: 'Projected Sales',
-                        data: [65, 59, 80, 81, 56, 95, 120],
+                        label: 'Revenue (₹)',
+                        data: data.length ? data : [0, 0, 0, 0, 0, 0, 0],
                         borderColor: '#4f46e5',
                         backgroundColor: gradient,
                         fill: true,
@@ -809,6 +845,56 @@
                     }]
                 }
             });
+        }
+
+            });
+        }
+
+        // --- Product CRUD ---
+        function showAddProductModal() {
+            document.getElementById('add-product-modal').style.display = 'flex';
+        }
+
+        function closeAddProductModal() {
+            document.getElementById('add-product-modal').style.display = 'none';
+        }
+
+        async function submitAddProduct() {
+            const name = document.getElementById('new-prod-name').value;
+            const stock = document.getElementById('new-prod-stock').value;
+            const price = document.getElementById('new-prod-price').value;
+            const unit = document.getElementById('new-prod-unit').value;
+            const threshold = document.getElementById('new-prod-threshold').value;
+
+            const res = await fetch('/add_product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, stock, price, unit, threshold })
+            });
+
+            if (res.ok) {
+                closeAddProductModal();
+                document.getElementById('add-product-form').reset();
+                loadData();
+            } else {
+                alert("Failed to add product.");
+            }
+        }
+
+        async function deleteProduct(name) {
+            if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+
+            const res = await fetch('/delete_product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+
+            if (res.ok) {
+                loadData();
+            } else {
+                alert("Failed to delete product.");
+            }
         }
 
         async function loadHistory() {
