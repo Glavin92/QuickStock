@@ -1,12 +1,17 @@
 <!-- BULK RESTOCK HISTORY -->
-<div class="glass-card" style="margin-top: 2rem;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
-        <h3>📦 Recent Bulk Restocks</h3>
-        <button class="btn" style="background:#f1f5f9;" onclick="loadBulkHistory()">🔄 Refresh</button>
+<div class="card" style="margin-top: var(--space-6); padding: var(--space-5);">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="m-0" style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="package" style="width: 20px; height: 20px; color: var(--accent);"></i>
+            Recent Bulk Restocks
+        </h2>
+        <button class="btn" onclick="loadBulkHistory()">
+            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Refresh
+        </button>
     </div>
     <div id="bulk-history-container">
-        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
-            <i class="ri-inbox-line" style="font-size: 2.5rem; margin-bottom: 1rem; display: block;"></i>
+        <div class="text-center text-secondary py-5">
+            <i data-lucide="inbox" style="width: 48px; height: 48px; margin: 0 auto var(--space-3) auto; opacity: 0.3;"></i>
             No bulk restock sessions yet.
         </div>
     </div>
@@ -23,38 +28,39 @@
             if (data.history && data.history.length > 0) {
                 container.innerHTML = '';
                 data.history.forEach(session => {
-                    const itemsList = session.items_list.map(item => `<li>${item}</li>`).join('');
+                    const itemsList = session.items_list.map(item => `<li style="margin-bottom: 4px;">${item}</li>`).join('');
                     container.innerHTML += `
-                    <div class="glass-card" style="margin-bottom: 1rem; padding: 1.5rem; background: rgba(255,255,255,0.5);">
-                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                    <div style="margin-bottom: var(--space-4); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-primary);">
+                        <div class="flex justify-between items-start mb-3">
                             <div>
-                                <div style="font-weight: 700; font-size: 1.1rem; color: #1e293b;">
-                                    📅 ${session.date} at ${session.time}
+                                <div style="font-weight: 600; font-size: 15px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="calendar" style="width: 14px; height: 14px; color: var(--text-secondary);"></i>
+                                    ${session.date} at ${session.time}
                                 </div>
-                                <div style="color: #64748b; font-size: 0.9rem; margin-top: 0.3rem;">
+                                <div style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">
                                     ${session.items_count} items added
                                 </div>
                             </div>
-                            <div style="background: #10b981; color: white; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
-                                Completed
-                            </div>
+                            <span class="badge badge-success">Completed</span>
                         </div>
-                        <div style="background: rgba(255,255,255,0.7); padding: 1rem; border-radius: 8px;">
-                            <div style="font-weight: 600; margin-bottom: 0.5rem; color: #475569;">Items:</div>
-                            <ul style="margin: 0; padding-left: 1.5rem; color: #64748b;">
+                        <div style="background: var(--bg-secondary); padding: var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text-primary);">Items:</div>
+                            <ul style="margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 13px;">
                                 ${itemsList}
                             </ul>
                         </div>
                     </div>
                 `;
                 });
+                lucide.createIcons();
             } else {
                 container.innerHTML = `
-                <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
-                    <i class="ri-inbox-line" style="font-size: 2.5rem; margin-bottom: 1rem; display: block;"></i>
+                <div class="text-center text-secondary py-5">
+                    <i data-lucide="inbox" style="width: 48px; height: 48px; margin: 0 auto var(--space-3) auto; opacity: 0.3;"></i>
                     No bulk restock sessions yet.
                 </div>
             `;
+                lucide.createIcons();
             }
         } catch (e) {
             console.error('Failed to load bulk history:', e);

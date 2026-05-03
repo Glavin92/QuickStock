@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}QuickStock{% endblock %}</title>
+    <!-- Fonts & Icons -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quickstock.css') }}">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="app-sidebar">
+            <div class="sidebar-header">
+                {% block sidebar_brand %}
+                <i data-lucide="package"></i>
+                <span>QuickStock</span>
+                {% endblock %}
+            </div>
+            
+            <nav class="sidebar-nav">
+                {% block sidebar_nav %}
+                {% endblock %}
+            </nav>
+            
+            <div class="sidebar-footer">
+                <a href="/logout" class="nav-link" style="width: 100%; margin: 0; justify-content: start; color: var(--danger);">
+                    <i data-lucide="log-out" style="width: 16px; height: 16px;"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <div class="top-bar-left flex items-center gap-3">
+                    <button class="btn btn-icon" id="sidebar-toggle-btn" title="Toggle Sidebar" style="border: none; padding: 4px; background: none; cursor: pointer;">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <h2 class="page-title m-0">{% block page_title %}Dashboard{% endblock %}</h2>
+                </div>
+                
+                <div class="top-bar-right flex items-center gap-3">
+                    {% block topbar_extra %}{% endblock %}
+                    <button class="btn btn-icon" id="theme-toggle" aria-label="Toggle Theme" style="border: none; padding: 4px;">
+                        <i data-lucide="sun" id="theme-icon"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="page-content">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Theme & UI Scripts -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Theme Toggle Logic
+        const toggle = document.getElementById('theme-toggle');
+        const icon = document.getElementById('theme-icon');
+        const root = document.documentElement;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        root.setAttribute('data-theme', savedTheme);
+        updateIcon(savedTheme);
+
+        toggle.addEventListener('click', () => {
+            const current = root.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateIcon(next);
+        });
+
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                icon.setAttribute('data-lucide', 'moon');
+            } else {
+                icon.setAttribute('data-lucide', 'sun');
+            }
+            lucide.createIcons();
+        }
+
+        // Sidebar Toggle Logic (Mobile & Desktop)
+        const menuBtn = document.getElementById('sidebar-toggle-btn');
+        const sidebar = document.getElementById('app-sidebar');
+        if(menuBtn && sidebar) {
+            menuBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                sidebar.classList.toggle('open'); // For mobile fixed positioning
+            });
+        }
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

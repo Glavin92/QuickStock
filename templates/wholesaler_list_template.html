@@ -1,53 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wholesalers - QuickStock</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Available Wholesalers</h1>
-            <a href="/dashboard" class="text-blue-600 hover:underline">Back to Dashboard</a>
-        </div>
+{% extends "base.html" %}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {% for w in wholesalers %}
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">{{ w[1] }}</h2>
-                        <p class="text-sm text-gray-500">{{ w[2] }} • {{ w[3] }}</p>
-                    </div>
-                    <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">Wholesaler</span>
-                </div>
-                <div class="space-y-4">
-                    <div class="flex items-center gap-2 text-gray-600">
-                        <i class="ri-phone-line"></i>
-                        <span>{{ w[4] }}</span>
-                    </div>
-                    <form action="/wholesaler/order/create" method="POST" class="space-y-2">
-                        <input type="hidden" name="wholesaler_id" value="{{ w[0] }}">
-                        <textarea name="order_details" placeholder="What do you need to restock?" 
-                            class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" required></textarea>
-                        <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold">
-                            Send Restock Order
-                        </button>
-                    </form>
-                </div>
+{% block title %}Wholesalers | QuickStock{% endblock %}
+
+{% block page_title %}Available Wholesalers{% endblock %}
+
+{% block sidebar_nav %}
+<a href="/dashboard" class="nav-link">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="#" class="nav-link active">
+    <i data-lucide="users"></i> <span>Wholesalers</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <p class="text-secondary">Connect with registered wholesalers in your area to restock your inventory.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4);">
+    {% for w in wholesalers %}
+    <div class="card" style="padding: var(--space-4);">
+        <div class="flex justify-between items-start mb-3">
+            <div>
+                <h2 class="m-0" style="font-size: 16px; font-weight: 600;">{{ w[1] }}</h2>
+                <p class="text-secondary mt-1" style="font-size: 13px;">{{ w[2] }} &bull; {{ w[3] }}</p>
             </div>
-            {% endfor %}
+            <span class="badge" style="background-color: var(--accent-muted); color: var(--accent); font-size: 10px; text-transform: uppercase;">Wholesaler</span>
         </div>
         
-        {% if not wholesalers %}
-        <div class="bg-white p-12 rounded-xl text-center text-gray-500 border border-dashed border-gray-300">
-            <i class="ri-store-2-line text-4xl mb-2 block"></i>
-            No registered wholesalers found in your area yet.
+        <div class="flex items-center gap-2 mb-4 text-secondary" style="font-size: 13px;">
+            <i data-lucide="phone" style="width: 14px; height: 14px;"></i>
+            <span>{{ w[4] }}</span>
         </div>
-        {% endif %}
+        
+        <form action="/wholesaler/order/create" method="POST">
+            <input type="hidden" name="wholesaler_id" value="{{ w[0] }}">
+            <div class="form-group mb-3">
+                <textarea name="order_details" class="input-field" placeholder="What do you need to restock?"
+                    style="height: 80px; padding: var(--space-3); resize: vertical;" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-full">
+                <i data-lucide="send" style="width: 14px; height: 14px;"></i> Send Restock Order
+            </button>
+        </form>
     </div>
-</body>
-</html>
+    {% endfor %}
+</div>
+
+{% if not wholesalers %}
+<div class="card text-center" style="padding: var(--space-8); grid-column: 1 / -1;">
+    <div class="flex justify-center mb-3">
+        <i data-lucide="store" style="width: 48px; height: 48px; color: var(--text-secondary); opacity: 0.5;"></i>
+    </div>
+    <h2 style="font-size: 18px; font-weight: 600;">No Wholesalers Found</h2>
+    <p class="text-secondary mt-1">There are no registered wholesalers in your area yet.</p>
+</div>
+{% endif %}
+{% endblock %}

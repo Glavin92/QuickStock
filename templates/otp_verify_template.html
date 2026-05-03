@@ -1,38 +1,116 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify OTP - QuickStock</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Verify OTP</h2>
-        
-        <p class="text-sm text-gray-600 text-center mb-6">
-            Enter the 6-digit OTP sent to <strong>{{ phone }}</strong>
-        </p>
+{% extends "base_auth.html" %}
 
-        {% if error %}
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            Invalid or expired OTP. Please try again.
+{% block title %}Verify OTP - QuickStock{% endblock %}
+
+{% block content %}
+<div class="auth-card" style="max-width: 380px;">
+    <div class="text-center mb-4">
+        <div style="display: flex; justify-content: center; margin-bottom: var(--space-2);">
+            <i data-lucide="shield-check" style="width: 40px; height: 40px; color: var(--accent);"></i>
         </div>
-        {% endif %}
-
-        <form action="/login/otp/verify" method="POST" class="space-y-4">
-            <div>
-                <input type="text" name="otp" maxlength="6" class="w-full text-center text-2xl tracking-widest px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="000000" required autofocus>
-            </div>
-
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors font-bold">
-                Verify OTP
-            </button>
-        </form>
-        
-        <p class="mt-4 text-center text-sm text-gray-600">
-            Didn't receive code? <a href="/login" class="text-blue-600 hover:underline">Try again</a>
+        <h2>Verify OTP</h2>
+        <p class="text-secondary mt-1">
+            Enter the 6-digit OTP sent to <br><strong style="color: var(--text-primary);">{{ phone }}</strong>
         </p>
     </div>
-</body>
-</html>
+
+    {% if error %}
+    <div class="mb-4" style="background: var(--danger-muted); color: var(--danger); padding: var(--space-3); border-radius: var(--radius-sm); font-size: 13px; text-align: center; border: 1px solid var(--danger);">
+        Invalid or expired OTP. Please try again.
+    </div>
+    {% endif %}
+
+    <form action="/login/otp/verify" method="POST" id="otp-form" class="space-y-4">
+        <!-- Hidden input to store the concatenated OTP -->
+        <input type="hidden" name="otp" id="hidden-otp" required>
+        
+        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: var(--space-4);">
+            <input type="text" maxlength="1" class="otp-input" autofocus>
+            <input type="text" maxlength="1" class="otp-input">
+            <input type="text" maxlength="1" class="otp-input">
+            <input type="text" maxlength="1" class="otp-input">
+            <input type="text" maxlength="1" class="otp-input">
+            <input type="text" maxlength="1" class="otp-input">
+        </div>
+
+        <button type="submit" class="btn btn-primary w-full" style="height: 36px; border-radius: var(--radius-md);">
+            Verify OTP
+        </button>
+    </form>
+    
+    <div class="text-center mt-4 pt-4" style="border-top: 1px solid var(--border);">
+        <p class="text-secondary" style="font-size: 13px;">
+            Didn't receive code? <a href="/login">Try again</a>
+        </p>
+    </div>
+</div>
+
+<style>
+    .otp-input {
+        width: 44px;
+        height: 48px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background-color: var(--bg-input);
+        color: var(--text-primary);
+        font-size: 20px;
+        font-weight: 600;
+        text-align: center;
+        outline: none;
+        transition: border-color 0.15s ease;
+    }
+    .otp-input:focus {
+        border-color: var(--accent);
+    }
+</style>
+
+<script>
+    const inputs = document.querySelectorAll('.otp-input');
+    const hiddenOtp = document.getElementById('hidden-otp');
+    const form = document.getElementById('otp-form');
+
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            const val = e.target.value;
+            // Advance to next field
+            if (val && index < inputs.length - 1) {
+                inputs[index + 1].focus();
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            // Handle backspace
+            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                inputs[index - 1].focus();
+            }
+        });
+        
+        // Handle paste
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pastedData = e.clipboardData.getData('text').slice(0, inputs.length);
+            for (let i = 0; i < pastedData.length; i++) {
+                if (inputs[i]) {
+                    inputs[i].value = pastedData[i];
+                    if (i < inputs.length - 1) {
+                        inputs[i + 1].focus();
+                    }
+                }
+            }
+        });
+    });
+
+    form.addEventListener('submit', (e) => {
+        let otpValue = '';
+        inputs.forEach(input => {
+            otpValue += input.value;
+        });
+        hiddenOtp.value = otpValue;
+        
+        if (otpValue.length !== 6) {
+            e.preventDefault();
+            alert('Please enter all 6 digits of the OTP.');
+        }
+    });
+</script>
+{% endblock %}

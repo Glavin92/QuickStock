@@ -3,28 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <title>Bill {{ bill[1] }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     @media print { .no-print { display: none; } }
-    body { font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 16px; }
-    h2 { text-align: center; margin-bottom: 4px; }
-    .divider { border-top: 1px dashed #333; margin: 8px 0; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    td, th { padding: 4px 2px; text-align: left; }
-    th { border-bottom: 1px solid #333; }
+    body { font-family: 'JetBrains Mono', monospace; max-width: 320px; margin: 0 auto; padding: 16px; color: #1a1a1a; }
+    h2 { text-align: center; margin-bottom: 4px; font-size: 18px; font-weight: 700; }
+    .divider { border-top: 1px dashed #d1d5db; margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    td, th { padding: 4px 0; text-align: left; }
+    th { border-bottom: 1px dashed #d1d5db; padding-bottom: 6px; font-weight: 600; }
     .right { text-align: right; }
-    .total-row { font-weight: bold; font-size: 15px; }
+    .total-row { font-weight: 700; font-size: 14px; }
+    .btn { background-color: #2383E2; color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+    .btn:hover { background-color: #1A6FCC; }
+    p { font-size: 12px; line-height: 1.5; margin: 4px 0; }
   </style>
 </head>
 <body>
-  <h2>{{ bill[14] }}</h2>           {# shop_name (adjusted index from query) #}
-  <p style="text-align:center; font-size:12px;">{{ bill[15] }}<br>📞 {{ bill[16] }}</p>
+  <h2>{{ bill[14] }}</h2>           {# shop_name #}
+  <p style="text-align:center;">{{ bill[15] }}<br>📞 {{ bill[16] }}</p>
+  
   <div class="divider"></div>
-  <p>Bill No: <strong>{{ bill[1] }}</strong><br>
-     Date: {{ bill[13].strftime('%d %b %Y %I:%M %p') }}<br>
-     Customer: {{ bill[3] }}
-     {% if bill[4] %} | 📞 {{ bill[4] }}{% endif %}
+  
+  <p>
+    Bill No : <strong>{{ bill[1] }}</strong><br>
+    Date    : {{ bill[13].strftime('%d %b %Y %I:%M %p') }}<br>
+    Customer: {{ bill[3] }} {% if bill[4] %} (📞 {{ bill[4] }}){% endif %}
   </p>
+  
   <div class="divider"></div>
+  
   <table>
     <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th class="right">Amount</th></tr></thead>
     <tbody>
@@ -38,19 +46,29 @@
       {% endfor %}
     </tbody>
   </table>
+  
   <div class="divider"></div>
+  
   <table>
     <tr><td>Subtotal</td><td class="right">₹{{ bill[5] }}</td></tr>
     {% if bill[6] > 0 %}<tr><td>Discount</td><td class="right">- ₹{{ bill[6] }}</td></tr>{% endif %}
     {% if bill[7] > 0 %}<tr><td>GST ({{ bill[7] }}%)</td><td class="right">₹{{ bill[8] }}</td></tr>{% endif %}
+    <tr><td colspan="2"><div class="divider" style="margin: 4px 0;"></div></td></tr>
     <tr class="total-row"><td>TOTAL</td><td class="right">₹{{ bill[9] }}</td></tr>
   </table>
+  
   <div class="divider"></div>
-  <p style="text-align:center; font-size:12px;">
-    Payment: {{ bill[10] | upper }}<br>Thank you for shopping! 🙏
+  
+  <p style="text-align:center;">
+    Payment: {{ bill[10] | upper }}<br>
+    Thank you for shopping! 🙏
   </p>
-  <div class="no-print" style="text-align:center; margin-top:16px;">
-    <button onclick="window.print()">🖨️ Print / Save PDF</button>
+  
+  <div class="no-print" style="text-align:center; margin-top:32px;">
+    <button class="btn" onclick="window.print()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      Print / Save PDF
+    </button>
   </div>
 </body>
 </html>

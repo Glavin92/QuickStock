@@ -1,942 +1,436 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickStock™ | Next-Gen Inventory Intelligence</title>
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
-    <!-- Charts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+{% block title %}Dashboard - QuickStock{% endblock %}
 
-    <style>
-        :root {
-            /* Premium Gradient Palette */
-            --bg-body: #f8fafc;
-            --surface: #ffffff;
-            --primary: #4f46e5;
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --glass: rgba(255, 255, 255, 0.85);
-            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
-        }
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+{% endblock %}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Outfit', sans-serif;
-            -webkit-font-smoothing: antialiased;
-        }
+{% block page_title %}Dashboard{% endblock %}
 
-        body {
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            min-height: 100vh;
-            overflow-x: hidden;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-        }
+{% block sidebar_nav %}
+<a href="#" class="nav-link active" id="nav-dashboard" onclick="switchView('dashboard')">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="#" class="nav-link" id="nav-inventory" onclick="switchView('inventory')">
+    <i data-lucide="package"></i> <span>Inventory</span>
+</a>
+<a href="#" class="nav-link" id="nav-orders" onclick="switchView('orders')">
+    <i data-lucide="shopping-cart"></i> <span>Orders & Billing</span>
+    <span class="badge badge-danger" id="nav-orders-badge" style="display:none; margin-left:auto;">0</span>
+</a>
+<a href="#" class="nav-link" id="nav-analytics" onclick="switchView('analytics')">
+    <i data-lucide="bar-chart-2"></i> <span>Analytics</span>
+</a>
+<a href="#" class="nav-link" id="nav-wholesaler-orders" onclick="switchView('wholesaler-orders')">
+    <i data-lucide="truck"></i> <span>Wholesaler Orders</span>
+</a>
+<a href="#" class="nav-link" id="nav-history" onclick="switchView('history')">
+    <i data-lucide="clock"></i> <span>History</span>
+</a>
+<a href="#" class="nav-link" id="nav-notifications" onclick="switchView('notifications')">
+    <i data-lucide="bell"></i> <span>Notifications</span>
+</a>
+<a href="#" class="nav-link" id="nav-chat" onclick="switchView('chat')">
+    <i data-lucide="message-square"></i> <span>Chat</span>
+    <span class="badge badge-danger" id="nav-chat-badge" style="display:none; margin-left:auto;">0</span>
+</a>
+{% endblock %}
 
-        /* --- Sidebar --- */
-        .sidebar {
-            background: var(--surface);
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            gap: 2.5rem;
-            border-right: 1px solid rgba(0, 0, 0, 0.05);
-            height: 100vh;
-            position: sticky;
-            top: 0;
-        }
+{% block topbar_extra %}
+<div class="flex items-center gap-2 mr-3" style="margin-right: var(--space-4);">
+    <div id="voice-status-dot" style="width:8px; height:8px; border-radius:50%; background:var(--text-secondary);"></div>
+    <span id="voice-status-text" class="text-secondary" style="font-size:12px; font-weight:500;">Voice Offline</span>
+</div>
+<div class="user-avatar" title="User">
+    {{ session['user'][:1] | upper if session.get('user') else 'U' }}
+</div>
+{% endblock %}
 
-        .brand {
-            font-size: 1.8rem;
-            font-weight: 800;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
-        }
+{% block content %}
+<style>
+    .view-section { display: none; }
+    .view-section.active { display: block; }
+    /* Chat layout */
+    .chat-layout { display: flex; height: calc(100vh - 120px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-primary); overflow: hidden; }
+    .chat-sidebar { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-secondary); }
+    .chat-sidebar-header { padding: var(--space-4); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .conv-item { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; }
+    .conv-item:hover { background: var(--bg-hover); }
+    .conv-item.active { background: var(--accent-muted); }
+    .conv-name { font-weight: 500; font-size: 13px; }
+    .conv-preview { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .conv-unread { position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%); background: var(--danger); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 99px; }
+    .chat-main { flex: 1; display: flex; flex-direction: column; }
+    .chat-header { padding: var(--space-4); border-bottom: 1px solid var(--border); font-weight: 500; font-size: 14px; background: var(--bg-primary); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+    .msg-bubble { max-width: 70%; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; line-height: 1.5; }
+    .msg-bubble.mine { background: var(--accent); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+    .msg-bubble.theirs { background: var(--bg-hover); color: var(--text-primary); align-self: flex-start; border-bottom-left-radius: 2px; }
+    .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
+    .chat-input-area { padding: var(--space-4); border-top: 1px solid var(--border); display: flex; gap: var(--space-2); background: var(--bg-primary); }
+    .btn-send { background: var(--accent); color: white; border: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .btn-send i { width: 16px; height: 16px; }
+    /* Item row */
+    .item-row input, .item-row select { height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; background: var(--bg-input); color: var(--text-primary); }
+    .item-row input:focus { border-color: var(--accent); }
+    .queue-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-3); display: flex; justify-content: space-between; align-items: center; }
+</style>
 
-        .nav-menu {
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-        }
+<!-- DASHBOARD -->
+<div id="view-dashboard" class="view-section active">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
+        <div class="card cursor-pointer" onclick="showRevenueModal()" style="cursor: pointer;">
+            <div class="text-secondary mb-1">Today's Revenue</div>
+            <div class="metric-value" style="font-size: 24px; font-weight: 600;">₹0</div>
+        </div>
+        <div class="card">
+            <div class="text-secondary mb-1">Low Stock Items</div>
+            <div id="dashboard-low-stock" style="font-size: 24px; font-weight: 600; color: var(--danger);">0</div>
+        </div>
+        <div class="card cursor-pointer" onclick="switchView('orders')" style="cursor: pointer;">
+            <div class="text-secondary mb-1">Pending Confirmations</div>
+            <div id="dashboard-pending" style="font-size: 24px; font-weight: 600;">0</div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4);">
+        <div class="card" style="height: 300px; display: flex; flex-direction: column;">
+            <h2 class="mb-4">Revenue Trends</h2>
+            <div style="flex: 1; position: relative;">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h2 class="mb-4">Quick Actions</h2>
+            <div class="flex" style="flex-direction: column; gap: var(--space-2);">
+                <button class="btn w-full justify-between" onclick="switchView('inventory')">
+                    <span>Manage Inventory</span><i data-lucide="chevron-right" style="width:16px;height:16px;"></i>
+                </button>
+                <button class="btn w-full justify-between" onclick="switchView('orders')">
+                    <span>Voice Orders</span><i data-lucide="chevron-right" style="width:16px;height:16px;"></i>
+                </button>
+                <button class="btn w-full justify-between" onclick="window.location.href='/market-trends'">
+                    <span>Market Trends</span><i data-lucide="chevron-right" style="width:16px;height:16px;"></i>
+                </button>
+                <button class="btn w-full justify-between" onclick="window.location.href='/notifications'">
+                    <span>Notifications</span><i data-lucide="chevron-right" style="width:16px;height:16px;"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem 1.2rem;
-            border-radius: 16px;
-            font-weight: 600;
-            font-size: 1rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: all 0.3s;
-        }
+<!-- INVENTORY -->
+<div id="view-inventory" class="view-section">
+    <div class="flex justify-between items-center mb-4">
+        <h2>Inventory Items</h2>
+        <button class="btn btn-primary" onclick="showAddProductModal()">
+            <i data-lucide="plus" style="width:16px;height:16px;"></i> Add Product
+        </button>
+    </div>
+    <div class="card" style="padding: 0;">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product Name</th>
+                        <th>Stock Qty</th>
+                        <th>Unit</th>
+                        <th>Price (₹)</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-tbody">
+                    <tr><td colspan="6" class="text-center text-secondary py-4" style="text-align: center;">Loading inventory...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-        .nav-item:hover {
-            color: var(--primary);
-            background: rgba(79, 70, 229, 0.04);
-            transform: translateX(5px);
-        }
+<!-- ORDERS / BILLING -->
+<div id="view-orders" class="view-section">
+    <div class="flex gap-4 mb-4" style="border-bottom: 1px solid var(--border);">
+        <button class="btn order-tab active" id="tab-voice" onclick="switchOrderTab('voice')" style="border: none; border-bottom: 2px solid var(--accent); border-radius: 0; padding-bottom: 8px; font-weight: 600; color: var(--accent); background: transparent;">
+            Voice Pending
+        </button>
+        <button class="btn order-tab" id="tab-billing" onclick="switchOrderTab('billing')" style="border: none; border-bottom: 2px solid transparent; border-radius: 0; padding-bottom: 8px; font-weight: 500; color: var(--text-secondary); background: transparent;">
+            New Bill
+        </button>
+    </div>
 
-        .nav-item.active {
-            background: var(--primary-gradient);
-            color: white;
-            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25);
-        }
+    <!-- Voice Queue Tab -->
+    <div id="tab-content-voice" class="order-tab-content">
+        <div id="orders-list">
+            <div class="card text-center" style="padding: var(--space-6) 0; text-align: center;">
+                <div style="display: flex; justify-content: center; margin-bottom: var(--space-3);">
+                    <i data-lucide="check-circle-2" style="width:48px;height:48px;color:var(--success);"></i>
+                </div>
+                <h3 style="font-size:16px;font-weight:500;">All caught up!</h3>
+                <p class="text-secondary mt-1">No pending voice orders.</p>
+            </div>
+        </div>
+    </div>
 
-        /* --- Main Content --- */
-        main {
-            padding: 2.5rem 3rem;
-            overflow-y: auto;
-        }
+    <!-- Billing Tab -->
+    <div id="tab-content-billing" class="order-tab-content" style="display: none;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4);">
+            <!-- Left: Bill Construction -->
+            <div class="card">
+                <h2 class="mb-4">Create Bill</h2>
+                <div class="flex gap-3 mb-4">
+                    <div class="form-group w-full mb-0">
+                        <label>Customer Name</label>
+                        <input type="text" id="cust-name" class="input-field">
+                    </div>
+                    <div class="form-group w-full mb-0">
+                        <label>Phone Number</label>
+                        <input type="text" id="cust-phone" class="input-field">
+                    </div>
+                </div>
 
-        /* --- View Container (Page switching) --- */
-        .view-section {
-            display: none;
-            /* Hidden by default */
-            animation: fadeIn 0.4s ease-out;
-        }
+                <div style="display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; margin-bottom: 8px;">
+                    <label class="mb-0">Product</label>
+                    <label class="mb-0">Qty</label>
+                    <label class="mb-0">Unit</label>
+                    <label class="mb-0">Price</label>
+                    <label></label>
+                </div>
+                <div id="items-container"></div>
+                
+                <button class="btn mt-3" onclick="addItemRow()" style="width: 100%; border: 1px dashed var(--border);">
+                    <i data-lucide="plus" style="width:16px;height:16px;"></i> Add Item
+                </button>
 
-        .view-section.active {
-            display: block;
-            /* Show active */
-        }
+                <div class="flex justify-between items-end mt-5 pt-4" style="border-top: 1px solid var(--border);">
+                    <div class="flex gap-3">
+                        <div class="form-group mb-0" style="width: 120px;">
+                            <label>Discount (₹)</label>
+                            <input type="number" id="discount" class="input-field" value="0" oninput="updatePreview()">
+                        </div>
+                        <div class="form-group mb-0" style="width: 120px;">
+                            <label>Payment</label>
+                            <select id="payment-mode" class="input-field" style="height: 36px; appearance: none; padding-right: 24px; background: var(--bg-input) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%236B6B6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat right 8px center;">
+                                <option value="cash">Cash</option>
+                                <option value="upi">UPI</option>
+                                <option value="card">Card</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveBill()">Save Bill</button>
+                </div>
+            </div>
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
+            <!-- Right: Preview -->
+            <div class="card" style="display: flex; flex-direction: column;">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="m-0">Preview</h2>
+                    <button class="btn" onclick="printBill()" style="height: 28px; padding: 0 10px;">
+                        <i data-lucide="printer" style="width:14px;height:14px;"></i> Print
+                    </button>
+                </div>
+                
+                <div id="bill-preview" style="background: var(--bg-primary); padding: var(--space-4); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-family: 'JetBrains Mono', monospace; font-size: 12px; flex: 1;">
+                    <div style="text-align: center; border-bottom: 1px dashed var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+                        <div style="font-weight: 600; font-size: 14px;">{{ session.shop or 'QuickStock Store' }}</div>
+                        <div>Receipt #<span id="prev-billno">New</span></div>
+                        <div>Date: <span id="prev-date"></span></div>
+                        <div>Customer: <span id="prev-cust">Walk-in</span></div>
+                    </div>
+                    <table style="width: 100%; font-size: 12px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <th style="padding: 4px 0; text-align: left; background: none;">Item</th>
+                                <th style="padding: 4px 0; text-align: left; background: none;">Qty</th>
+                                <th style="padding: 4px 0; text-align: right; background: none;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prev-items"></tbody>
+                    </table>
+                    <div style="border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Subtotal:</span>
+                            <span id="pv-sub">₹0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Discount:</span>
+                            <span id="pv-disc">-₹0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 14px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px;">
+                            <span>Total:</span>
+                            <span id="pv-total">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Hidden Print Container -->
+    <div id="printable-bill" style="display: none;"></div>
+</div>
 
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+<!-- ANALYTICS -->
+<div id="view-analytics" class="view-section">
+    <h2 class="mb-4">Business Analytics</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+        <div class="card" style="height: 350px;">
+            <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px;">Sales by Category</h3>
+            <div style="position: relative; height: 280px;">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+        <div class="card flex items-center justify-center text-secondary" style="text-align: center;">
+            More analytics charts coming soon.
+        </div>
+    </div>
+</div>
 
-        /* --- Dashboard Grid --- */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
+<!-- WHOLESALER ORDERS -->
+<div id="view-wholesaler-orders" class="view-section">
+    <div class="flex justify-between items-center mb-4">
+        <h2>My Wholesaler Orders</h2>
+        <div class="flex gap-2">
+            <button class="btn" onclick="loadWholesalerOrders('pending')">Pending</button>
+            <button class="btn" onclick="loadWholesalerOrders('dispatched')">Dispatched</button>
+            <button class="btn" onclick="loadWholesalerOrders('')">All</button>
+        </div>
+    </div>
+    <div id="wholesaler-orders-list">
+        <div class="text-center text-secondary py-5" style="text-align: center;">Loading wholesaler orders...</div>
+    </div>
+</div>
 
-        .glass-card {
-            background: var(--glass);
-            backdrop-filter: blur(12px);
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: var(--shadow-sm);
-            padding: 2rem;
-        }
+<!-- NOTIFICATIONS -->
+<div id="view-notifications" class="view-section">
+    <div class="mb-4">
+        <p class="text-secondary">Items that have fallen below their configured alert thresholds.</p>
+    </div>
 
-        .metric-card {
-            grid-column: span 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 160px;
-        }
-
-        .metric-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 14px;
-            display: grid;
-            place-items: center;
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .metric-value {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--text-main);
-            margin-bottom: 5px;
-        }
-
-        .metric-label {
-            font-size: 0.95rem;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        /* --- Tables --- */
-        .table-wrap {
-            background: white;
-            border-radius: 20px;
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-            margin-top: 2rem;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th {
-            text-align: left;
-            padding: 1.5rem;
-            background: #f8fafc;
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        td {
-            padding: 1.5rem;
-            border-bottom: 1px solid #f1f5f9;
-            color: var(--text-main);
-            font-weight: 500;
-        }
-
-        tr:hover td {
-            background: #f8fafc;
-        }
-
-        /* Chips */
-        .status-chip {
-            padding: 6px 14px;
-            border-radius: 30px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .chip-success {
-            background: #dcfce7;
-            color: #15803d;
-        }
-
-        .chip-warning {
-            background: #fef9c3;
-            color: #854d0e;
-        }
-
-        .chip-danger {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        /* --- Queued Item Style --- */
-        .queue-item {
-            background: white;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.2s;
-        }
-
-        .queue-item:hover {
-            box-shadow: var(--shadow-sm);
-            border-color: var(--primary);
-        }
-
-        .price-input {
-            width: 80px;
-            padding: 4px 8px;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            color: var(--text-dark);
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .price-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
-        }
-
-        /* --- Modal --- */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: var(--shadow-lg);
-            animation: slideUp 0.3s ease-out;
-        }
-
-        .btn {
-            border: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-success {
-            background: #10b981;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #059669;
-        }
-
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        /* --- Chat UI --- */
-        .chat-layout {
-            display: grid;
-            grid-template-columns: 320px 1fr;
-            height: calc(100vh - 200px);
-            min-height: 600px;
-            border: 1px solid rgba(0,0,0,0.08);
-            border-radius: 24px;
-            overflow: hidden;
-            background: white;
-            box-shadow: var(--shadow-lg);
-            margin-top: 1rem;
-        }
-        .chat-sidebar {
-            border-right: 1px solid rgba(0,0,0,0.06);
-            background: #fafbfc;
-            display: flex;
-            flex-direction: column;
-        }
-        .chat-sidebar-header {
-            padding: 16px 18px;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .conv-item {
-            padding: 14px 18px;
-            cursor: pointer;
-            border-bottom: 1px solid rgba(0,0,0,0.04);
-            position: relative;
-            transition: background 0.15s;
-        }
-        .conv-item:hover { background: rgba(79,70,229,0.04); }
-        .conv-item.active { background: rgba(79,70,229,0.08); border-left: 3px solid var(--primary); }
-        .conv-item .conv-name { font-weight: 600; font-size: 0.95rem; color: var(--text-main); }
-        .conv-item .conv-preview { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
-        .conv-unread {
-            background: #ef4444; color: white;
-            border-radius: 50%; width: 22px; height: 22px;
-            font-size: 0.7rem; font-weight: 700; display: flex; align-items: center;
-            justify-content: center; position: absolute; right: 14px; top: 14px;
-        }
-        .chat-main { display: flex; flex-direction: column; background: white; overflow: hidden; }
-        .chat-header {
-            padding: 14px 20px;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            font-size: 1rem;
-            font-weight: 600;
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .msg-bubble {
-            max-width: 70%;
-            padding: 10px 16px;
-            border-radius: 18px;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            word-break: break-word;
-        }
-        .msg-bubble.mine {
-            background: var(--primary-gradient);
-            color: white;
-            align-self: flex-end;
-            border-bottom-right-radius: 6px;
-        }
-        .msg-bubble.theirs {
-            background: #f1f5f9;
-            color: var(--text-main);
-            align-self: flex-start;
-            border-bottom-left-radius: 6px;
-        }
-        .msg-bubble.order_suggestion {
-            background: #fffcf0;
-            border: 1px solid #fbbf24;
-            color: var(--text-main);
-            white-space: pre-line;
-            max-width: 85%;
-            border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.1);
-        }
-        .msg-time { font-size: 0.7rem; color: rgba(0,0,0,0.4); margin-top: 6px; text-align: right; }
-        .msg-bubble.mine .msg-time { color: rgba(255,255,255,0.8); }
-        .msg-bubble.theirs .msg-time, .msg-bubble.order_suggestion .msg-time { color: #94a3b8; }
+    <div class="card mb-6" style="padding: var(--space-5);">
+        <div class="flex justify-between items-start gap-4 flex-wrap">
+            <div style="flex: 1; min-width: 300px;">
+                <h2 class="mb-3">Recommended for Restock</h2>
+                <div class="flex gap-2 items-center">
+                    <select id="add-item-select" class="input-field" style="flex: 1; max-width: 300px;">
+                        <option value="" disabled selected>Select an existing product...</option>
+                    </select>
+                    <button onclick="addManualItem()" class="btn">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add
+                    </button>
+                    <button onclick="addNewProductPrompt()" class="btn" style="border-style: dashed;">
+                        <i data-lucide="star" style="width: 14px; height: 14px;"></i> New Product
+                    </button>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="bulk-order-btn" onclick="sendBulkOrder()" style="height: 40px; padding: 0 20px;">
+                <i data-lucide="send" style="width: 16px; height: 16px;"></i> Send Order to Distributor
+            </button>
+        </div>
         
-        /* Custom Scrollbar */
-        .chat-messages::-webkit-scrollbar { width: 6px; }
-        .chat-messages::-webkit-scrollbar-track { background: transparent; }
-        .chat-messages::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .chat-messages::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
-        .chat-input-area {
-            display: flex;
-            padding: 14px 16px;
-            border-top: 1px solid rgba(0,0,0,0.06);
-            gap: 10px;
-        }
-        .chat-input-area input {
-            flex: 1; padding: 10px 18px;
-            border: 1px solid #e2e8f0; border-radius: 50px;
-            outline: none; font-size: 0.9rem;
-            font-family: 'Outfit', sans-serif;
-        }
-        .chat-input-area input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79,70,229,0.1); }
-        .btn-send {
-            background: var(--primary-gradient); color: white;
-            border: none; border-radius: 50%;
-            width: 42px; height: 42px;
-            cursor: pointer; font-size: 1.1rem;
-            display: grid; place-items: center;
-            transition: transform 0.15s;
-        }
-        .btn-send:hover { transform: scale(1.08); }
-    </style>
-</head>
-
-<body>
-
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <div class="brand">
-            <i class="ri-voiceprint-fill" style="color: #4f46e5;"></i>
-            <span>QuickStock</span>
-        </div>
-
-        <nav class="nav-menu">
-            <div id="nav-dashboard" class="nav-item active" onclick="switchView('dashboard')">
-                <i class="ri-dashboard-3-line"></i>
-                <span>Dashboard</span>
-            </div>
-            <div id="nav-inventory" class="nav-item" onclick="switchView('inventory')">
-                <i class="ri-archive-line"></i>
-                <span>All Inventory</span>
-            </div>
-            <div id="nav-orders" class="nav-item" onclick="switchView('orders')">
-                <i class="ri-shopping-cart-2-line"></i>
-                <span>Orders & Billing</span>
-                <span id="nav-orders-badge"
-                    style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: auto; display: none;">0</span>
-            </div>
-            <div id="nav-analytics" class="nav-item" onclick="switchView('analytics')">
-                <i class="ri-pie-chart-2-line"></i>
-                <span>Analytics</span>
-            </div>
-            <div id="nav-wholesaler-orders" class="nav-item" onclick="switchView('wholesaler-orders')">
-                <i class="ri-truck-line"></i>
-                <span>Wholesaler Orders</span>
-            </div>
-            <div id="nav-history" class="nav-item" onclick="switchView('history')">
-                <i class="ri-file-list-3-line"></i>
-                <span>History Log</span>
-            </div>
-            <div id="nav-chat" class="nav-item" onclick="switchView('chat')">
-                <i class="ri-chat-3-line"></i>
-                <span>Chat</span>
-                <span id="nav-chat-badge"
-                    style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: auto; display: none;">0</span>
-            </div>
-            <hr style="border: none; border-top: 1px solid rgba(0,0,0,0.05); margin: 0.5rem 0;">
-            <a href="/notifications" class="nav-item" style="text-decoration: none;">
-                <i class="ri-notification-3-line" style="color: #ef4444;"></i>
-                <span style="color: #ef4444;">Notifications</span>
-            </a>
-            <a href="/market-trends" class="nav-item" style="text-decoration: none;">
-                <i class="ri-funds-line"></i>
-                <span>Market Trends</span>
-            </a>
-            {% if session['role'] == 'admin' %}
-            <a href="/admin" class="nav-item" style="text-decoration: none;">
-                <i class="ri-admin-line"></i>
-                <span>Admin Panel</span>
-            </a>
-            {% endif %}
-            <div style="margin-top: auto;">
-                <a href="/logout" class="nav-item" style="text-decoration: none; color: #94a3b8;">
-                    <i class="ri-logout-box-r-line"></i>
-                    <span>Logout</span>
-                </a>
-            </div>
-        </nav>
-    </aside>
-
-    <!-- MAIN CONTENT -->
-    <main>
-
-        <!-- header -->
-        <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h1 id="page-title" style="font-size: 2rem; font-weight: 700;">Dashboard</h1>
-                <p style="color: var(--text-muted);">Welcome back to your store.</p>
-            </div>
-            <div id="voice-indicator"
-                style="background: white; padding: 0.8rem 1.5rem; border-radius: 50px; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-sm);">
-                <div id="voice-status-dot" style="width: 10px; height: 10px; background: #94a3b8; border-radius: 50%;">
-                </div>
-                <span id="voice-status-text" style="font-weight: 600; font-size: 0.9rem; color: #94a3b8;">Voice
-                    Offline</span>
-            </div>
-        </div>
-
-        <!-- VIEW 1: DASHBOARD -->
-        <div id="view-dashboard" class="view-section active">
-            <div class="dashboard-grid">
-                <!-- Metric 1 -->
-                <div class="glass-card metric-card" onclick="showRevenueModal()" style="cursor: pointer;">
-                    <div class="metric-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
-                        <i class="ri-money-dollar-circle-line"></i>
-                    </div>
-                    <div>
-                        <div class="metric-value">₹12,450</div>
-                        <div class="metric-label">Today's Revenue <i class="ri-arrow-right-s-line"
-                                style="vertical-align: middle;"></i></div>
-                    </div>
-                </div>
-                <!-- Metric 2 -->
-                <div class="glass-card metric-card" onclick="location.href='/notifications'" style="cursor: pointer;">
-                    <div class="metric-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
-                        <i class="ri-box-3-line"></i>
-                    </div>
-                    <div>
-                        <div class="metric-value" id="dashboard-low-stock">0</div>
-                        <div class="metric-label">Restock Needed <i class="ri-arrow-right-s-line"
-                                 style="vertical-align: middle;"></i></div>
-                    </div>
-                </div>
-                <!-- Metric 3 -->
-                <div class="glass-card metric-card">
-                    <div class="metric-icon" style="background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
-                        <i class="ri-shopping-bag-3-line"></i>
-                    </div>
-                    <div>
-                        <div class="metric-value" id="dashboard-pending">0</div>
-                        <div class="metric-label">Pending Orders</div>
-                    </div>
-                </div>
-                <!-- Metric 4 -->
-                <div class="glass-card metric-card">
-                    <div class="metric-icon" style="background: rgba(236, 72, 153, 0.1); color: #ec4899;">
-                        <i class="ri-user-star-line"></i>
-                    </div>
-                    <div>
-                        <div class="metric-value">4.9</div>
-                        <div class="metric-label">Store Rating</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="glass-card" style="margin-bottom: 2rem;">
-                <h3 style="margin-bottom: 1.5rem;">Sales Prediction (Next 7 Days)</h3>
-                <div style="height: 300px; width: 100%; position: relative;">
-                    <canvas id="salesChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 2: INVENTORY -->
-        <div id="view-inventory" class="view-section">
-            <div class="glass-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3>All Products</h3>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-success" onclick="showAddProductModal()">
-                            <i class="ri-add-line"></i> Add Product
-                        </button>
-                        <button class="btn" style="background:#f1f5f9;" onclick="loadData()">🔄 Refresh</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table id="inventory-table">
-                        <thead>
-                            <tr>
-                                <th>Product Name</th>
-                                <th>Current Stock</th>
-                                <th>Unit</th>
-                                <th>Price/Unit</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventory-tbody">
-                            <!-- Populated by JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 3: ORDERS & BILLING -->
-        <div id="view-orders" class="view-section">
-            <!-- Tabs -->
-            <div style="display: flex; gap: 10px; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb;">
-                <button id="tab-pending" class="order-tab active" onclick="switchOrderTab('pending')" style="padding: 12px 24px; font-weight: 600; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; color: #4f46e5; border-bottom-color: #4f46e5;">
-                    <i class="ri-time-line"></i> Pending Orders
-                </button>
-                <button id="tab-billing" class="order-tab" onclick="switchOrderTab('billing')" style="padding: 12px 24px; font-weight: 600; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; color: #6b7280;">
-                    <i class="ri-bill-line"></i> Create Bill
-                </button>
-            </div>
-
-            <!-- Pending Orders Tab Content -->
-            <div id="tab-content-pending" class="order-tab-content">
-                <h3 style="margin-bottom: 1.5rem;">Pending Approvals</h3>
-                <div id="orders-list">
-                    <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
-                        <i class="ri-check-double-line" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
-                        No pending orders found.
-                    </div>
-                </div>
-            </div>
-
-            <!-- Billing Tab Content -->
-            <div id="tab-content-billing" class="order-tab-content" style="display: none;">
-                <div style="display: grid; grid-template-columns: 1fr 400px; gap: 24px;">
-                    <!-- LEFT: Bill Builder -->
-                    <div>
-                        <div class="glass-card" style="margin-bottom: 16px;">
-                            <h3 style="margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Customer Details</h3>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-                                <div>
-                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Customer Name (optional)</label>
-                                    <input type="text" id="cust-name" placeholder="Walk-in Customer" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
-                                </div>
-                                <div>
-                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Phone (optional)</label>
-                                    <input type="tel" id="cust-phone" placeholder="9XXXXXXXXX" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
-                                </div>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                <div>
-                                    <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Payment Mode</label>
-                                    <select id="payment-mode" style="width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
-                                        <option value="cash">Cash</option>
-                                        <option value="upi">UPI</option>
-                                        <option value="card">Card</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="glass-card">
-                            <h3 style="margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px;">Items</h3>
-                            <div style="display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; color: #6b7280; font-weight: 600;">
-                                <span>Product</span><span>Qty</span><span>Unit</span><span>Price</span><span></span>
-                            </div>
-                            <div id="items-container"></div>
-                            <button onclick="addItemRow()" style="background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb; border-radius: 8px; padding: 10px; width: 100%; cursor: pointer; font-size: 14px; font-weight: 600; margin: 8px 0 16px;">+ Add Item</button>
-
-                            <div style="margin-bottom: 12px;">
-                                <label style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block;">Discount (₹)</label>
-                                <input type="number" id="discount" value="0" min="0" oninput="updatePreview()" style="width: 160px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;">
-                            </div>
-
-                            <div style="background: #f9fafb; border-radius: 8px; padding: 14px; margin-top: 12px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: #374151;"><span>Subtotal</span><span id="t-subtotal">₹0.00</span></div>
-                                <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; color: #374151;"><span>Discount</span><span id="t-discount">-₹0.00</span></div>
-                                <hr style="border-top: 1px solid #e5e7eb; margin: 8px 0;">
-                                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; color: #111; margin-top: 8px;"><span>Total</span><span id="t-total">₹0.00</span></div>
-                            </div>
-
-                            <button onclick="saveBill()" style="background: #2563eb; color: white; border: none; border-radius: 8px; padding: 14px; width: 100%; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 14px;">
-                                <i class="ri-save-line"></i> Save Bill & Update Inventory
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- RIGHT: Live Preview -->
-                    <div>
-                        <div class="glass-card" style="position: sticky; top: 24px;">
-                            <h3 style="margin-bottom: 16px;">Bill Preview</h3>
-                            <div id="bill-preview" style="font-size: 13px; background: white; border: 1px dashed #d1d5db; border-radius: 8px; padding: 20px;">
-                                <div style="text-align: center; margin-bottom: 12px;">
-                                    <h3 id="prev-shopname" style="font-size: 18px; font-weight: 700;">{{ session.get('shop', 'QuickStock') }}</h3>
-                                    <p id="prev-shopaddr" style="color: #6b7280; font-size: 12px;"></p>
-                                </div>
-                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
-                                    <span>Bill: <strong id="prev-billno">DRAFT</strong></span>
-                                    <span id="prev-date"></span>
-                                </div>
-                                <div style="font-size: 12px; margin-bottom: 8px;">Customer: <span id="prev-cust">Walk-in</span></div>
-                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
-                                <table width="100%" style="font-size: 13px;">
-                                    <thead>
-                                        <tr style="text-align: left; font-size: 12px; color: #6b7280;">
-                                            <th style="padding-bottom: 6px;">Item</th>
-                                            <th style="padding-bottom: 6px;">Qty</th>
-                                            <th style="padding-bottom: 6px; text-align: right;">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="prev-items"></tbody>
-                                </table>
-                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
-                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin: 3px 0;"><span>Subtotal</span><span id="pv-sub">₹0</span></div>
-                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin: 3px 0;"><span>Discount</span><span id="pv-disc">-₹0</span></div>
-                                <hr style="border: none; border-top: 1px dashed #d1d5db; margin: 10px 0;">
-                                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; margin-top: 6px;"><span>TOTAL</span><span id="pv-total">₹0</span></div>
-                                <div style="text-align: center; margin-top: 12px; font-size: 11px; color: #9ca3af;">Thank you! Visit Again</div>
-                            </div>
-
-                            <div style="display: flex; gap: 10px; margin-top: 16px;">
-                                <button onclick="printBill()" style="flex: 1; background: #111827; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer;">🖨️ Print</button>
-                                <button onclick="saveBill()" style="flex: 1; background: #16a34a; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer;">💾 Save</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hidden printable receipt -->
-        <div id="printable-bill" style="display: none;"></div>
-
-        <!-- VIEW 3.5: WHOLESALER ORDERS -->
-        <div id="view-wholesaler-orders" class="view-section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-                <h3 style="margin:0;">Wholesaler Orders</h3>
-                <div class="filter-tabs" style="display:flex; gap:10px;">
-                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('')">All</button>
-                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('pending')">Pending</button>
-                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('dispatched')">Dispatched</button>
-                    <button class="btn btn-sm" style="background:#f1f5f9; padding:5px 12px; border-radius:10px; font-weight:600; font-size:0.8rem;" onclick="loadWholesalerOrders('confirmed')">Confirmed</button>
-                </div>
-            </div>
-            <div id="wholesaler-orders-list">
-                <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
-                    <i class="ri-loader-4-line ri-spin" style="font-size: 3rem; margin-bottom: 1rem; display: block;"></i>
-                    Loading orders...
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 4: ANALYTICS -->
-        <div id="view-analytics" class="view-section">
-            <div class="dashboard-grid">
-                <div class="glass-card" style="grid-column: span 2;">
-                    <h3>Category Split</h3>
-                    <div style="height: 300px; width: 100%; position: relative;">
-                        <canvas id="categoryChart"></canvas>
-                    </div>
-                </div>
-                <div class="glass-card" style="grid-column: span 2;">
-                    <h3>Weekly Trends</h3>
-                    <p style="color:var(--text-muted);">Sales are up by 15% this week compared to last week.</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 5: HISTORY -->
-        <div id="view-history" class="view-section">
-            <div class="glass-card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3>Transaction Log</h3>
-                    <button class="btn" style="background:#f1f5f9;" onclick="loadHistory()">🔄 Refresh</button>
-                </div>
-                <div class="table-wrap">
-                    <table id="history-table">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Action</th>
-                                <th>Product</th>
-                                <th>Qty</th>
-                                <th>Amt</th>
-                                <th>Stock Change</th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-tbody">
-                            <tr>
-                                <td colspan="5">Loading history...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 6: CHAT -->
-        <div id="view-chat" class="view-section">
-            <div class="chat-layout">
-                <!-- Conversation List (left panel) -->
-                <div class="chat-sidebar" id="chat-sidebar">
-                    <div class="chat-sidebar-header">
-                        <h3 style="font-size:1rem; font-weight:700;">Conversations</h3>
-                        <button onclick="showNewChatModal()" class="btn" style="background:var(--primary-gradient); color:white; padding:6px 14px; border-radius:10px; font-size:0.85rem;" title="New Chat">＋ New</button>
-                    </div>
-                    <div id="conversation-list" style="flex:1; overflow-y:auto;"></div>
-                </div>
-
-                <!-- Message Area (right panel) -->
-                <div class="chat-main" id="chat-main">
-                    <div id="chat-placeholder" style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); flex-direction:column; gap:1rem;">
-                        <i class="ri-chat-3-line" style="font-size:3rem; opacity:0.3;"></i>
-                        <span>Select a conversation to start chatting</span>
-                    </div>
-
-                    <div id="chat-window" style="display:none; flex-direction:column; height:100%; overflow:hidden;">
-                        <div class="chat-header" id="chat-header">
-                            <strong id="chat-partner-name"></strong>
-                        </div>
-                        <div class="chat-messages" id="chat-messages"></div>
-                        <div class="chat-input-area">
-                            <input type="text" id="chat-input" placeholder="Type a message…"
-                                   onkeydown="if(event.key==='Enter') sendChatMessage()" maxlength="2000" />
-                            <button onclick="sendChatMessage()" class="btn-send"><i class="ri-send-plane-fill"></i></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
-    <!-- Add Product Modal -->
-    <div id="add-product-modal" class="modal-overlay" onclick="if(event.target === this) closeAddProductModal()">
-        <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-                <h3>Add New Product</h3>
-                <button onclick="closeAddProductModal()" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
-            </div>
-            <form id="add-product-form" onsubmit="event.preventDefault(); submitAddProduct();">
-                <div style="margin-bottom: 1rem;">
-                    <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Product Name (Hindi preferred)</label>
-                    <input type="text" id="new-prod-name" required style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                    <div>
-                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Initial Stock</label>
-                        <input type="number" id="new-prod-stock" required value="0" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
-                    </div>
-                    <div>
-                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Price (₹)</label>
-                        <input type="number" id="new-prod-price" required value="0" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                    <div>
-                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Unit</label>
-                        <select id="new-prod-unit" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
-                            <option value="पैकेट">पैकेट (Packet)</option>
-                            <option value="किलो">किलो (Kg)</option>
-                            <option value="लीटर">लीटर (Liter)</option>
-                            <option value="बोतल">बोतल (Bottle)</option>
-                            <option value="पीस">पीस (Piece)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Threshold</label>
-                        <input type="number" id="new-prod-threshold" required value="5" style="width:100%; padding:0.8rem; border:1px solid #e2e8f0; border-radius:10px;">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-success" style="width:100%; justify-content:center; padding:1rem;">Create Product</button>
-            </form>
+        <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
+            <label class="mb-2" style="font-weight: 600; font-size: 13px;">Add Custom Note (Optional):</label>
+            <textarea id="extra-text" class="input-field" placeholder="e.g. Please deliver by tomorrow morning."
+                style="height: 80px; padding: var(--space-3); resize: vertical;"></textarea>
         </div>
     </div>
 
-    <!-- Revenue Modal -->
-    <div id="revenue-modal" class="modal-overlay" onclick="if(event.target === this) this.style.display='none'">
-        <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
-                <h3>Daily Revenue History</h3>
-                <button onclick="document.getElementById('revenue-modal').style.display='none'" style="background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+    <div class="notifications-grid" id="notif-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4);">
+        <div class="text-center text-secondary py-4" style="grid-column: 1 / -1;">Loading inventory data...</div>
+    </div>
+</div>
+
+<!-- HISTORY -->
+<div id="view-history" class="view-section">
+    <h2 class="mb-4">Transaction History</h2>
+    <div class="card" style="padding: 0;">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Product</th>
+                        <th>Qty</th>
+                        <th>Amount</th>
+                        <th>Stock Change</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody">
+                    <tr><td colspan="6" class="text-center text-secondary py-4" style="text-align: center;">Loading history...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- CHAT -->
+<div id="view-chat" class="view-section">
+    <div class="chat-layout">
+        <div class="chat-sidebar" id="chat-sidebar">
+            <div class="chat-sidebar-header">
+                <span style="font-weight: 500;">Conversations</span>
+                <button onclick="showNewChatModal()" class="btn" style="height: 28px; padding: 0 8px;">
+                    <i data-lucide="plus" style="width:14px;height:14px;"></i> New
+                </button>
             </div>
-            <div class="table-wrap" style="margin-top:0;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th style="text-align:right;">Revenue</th>
-                        </tr>
-                    </thead>
-                    <tbody id="revenue-modal-body">
-                        <!-- Populated by JS -->
-                    </tbody>
-                </table>
+            <div id="conversation-list" style="flex: 1; overflow-y: auto;"></div>
+        </div>
+
+        <div class="chat-main" id="chat-main">
+            <div id="chat-placeholder" class="flex flex-col items-center justify-center text-secondary" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <i data-lucide="message-square" style="width:48px;height:48px;opacity:0.3;margin-bottom:12px;"></i>
+                <span>Select a conversation</span>
+            </div>
+
+            <div id="chat-window" style="display: none; flex-direction: column; height: 100%;">
+                <div class="chat-header" id="chat-partner-name"></div>
+                <div class="chat-messages" id="chat-messages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" class="input-field" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendChatMessage()" style="flex:1;">
+                    <button onclick="sendChatMessage()" class="btn-send">
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
+</div>
 
-    <script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
         // --- Global State ---
         let globalStats = {};
         let salesChartInstance = null;
 
         // --- Navigation Logic ---
         function switchView(viewName) {
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            document.getElementById('nav-' + viewName).classList.add('active');
+            document.querySelectorAll('.sidebar-nav .nav-link').forEach(el => el.classList.remove('active'));
+            const navEl = document.getElementById('nav-' + viewName);
+            if (navEl) navEl.classList.add('active');
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
             document.getElementById('view-' + viewName).classList.add('active');
 
             const titles = {
-                'dashboard': 'Dashboard Overview',
+                'dashboard': 'Dashboard',
                 'inventory': 'Inventory Management',
                 'orders': 'Order Processing',
-                'analytics': 'Business Intelligence',
+                'analytics': 'Business Analytics',
                 'wholesaler-orders': 'Wholesaler Orders',
-                'history': 'Transaction Logs',
-                'chat': 'Chat with Wholesalers'
+                'notifications': 'Low Stock Alerts',
+                'history': 'Transaction History',
+                'chat': 'Chat'
             };
-            document.getElementById('page-title').innerText = titles[viewName];
+            const pageTitle = document.querySelector('.page-title');
+            if (pageTitle) pageTitle.innerText = titles[viewName] || viewName;
 
             if (viewName === 'wholesaler-orders') loadWholesalerOrders();
-
             if (viewName === 'inventory') loadData();
             if (viewName === 'orders') loadData();
             if (viewName === 'analytics') loadAnalyticsCharts();
@@ -1008,8 +502,8 @@
                                         <div style="color: var(--text-muted); font-size: 0.9rem;">${details}</div>
                                     </div>
                                     <div style="display: flex; gap: 10px;">
-                                        <button class="btn btn-success" onclick="approveTx(${id})">Approve</button>
-                                        <button class="btn btn-danger" onclick="rejectTx(${id})">Reject</button>
+                                        <button class="badge badge-success" onclick="approveTx(${id})">Approve</button>
+                                        <button class="badge badge-danger" onclick="rejectTx(${id})">Reject</button>
                                     </div>
                                 </div>
                             `;
@@ -1045,11 +539,11 @@
 
                             let statusHtml = '';
                             if (stock <= thresh) {
-                                statusHtml = `<span class="status-chip chip-danger">Low Stock</span>`;
+                                statusHtml = `<span class="badge badge-danger">Low Stock</span>`;
                             } else if (stock <= thresh * 1.5) {
-                                statusHtml = `<span class="status-chip chip-warning">Warning</span>`;
+                                statusHtml = `<span class="badge badge-warning">Warning</span>`;
                             } else {
-                                statusHtml = `<span class="status-chip chip-success">Healthy</span>`;
+                                statusHtml = `<span class="badge badge-success">Healthy</span>`;
                             }
 
                             let inputValue = price === 0 ? '' : price;
@@ -1072,13 +566,76 @@
                                     </td>
                                     <td>${statusHtml}</td>
                                     <td>
-                                        <button class="btn" style="color:#ef4444; background:none; padding:0;" onclick="deleteProduct('${key}')">
-                                            <i class="ri-delete-bin-line"></i>
+                                        <button style="color:var(--danger); background:none; border:none; padding:4px; cursor:pointer; display:flex; align-items:center; justify-content:center;" onclick="deleteProduct('${key}')" title="Delete Product">
+                                            <i data-lucide="trash-2" style="width:16px; height:16px;"></i>
                                         </button>
                                     </td>
                                 </tr>
                             `;
                         }
+                    }
+
+                    // Populate notifications grid and select dropdown
+                    const select = document.getElementById('add-item-select');
+                    if (select) {
+                        select.innerHTML = '<option value="" disabled selected>Select an existing product...</option>';
+                        let lowStockHtml = '';
+                        for (let [key, val] of entries) {
+                            let name = enNames[key] || val.name || key;
+                            name = name.charAt(0).toUpperCase() + name.slice(1);
+                            select.innerHTML += `<option value="${name}">${name}</option>`;
+                            let stock = val.current_stock || 0;
+                            let thresh = val.threshold || 0;
+                            let unit = val.unit || '';
+                            if (stock <= thresh) {
+                                lowStockHtml += `
+                                <div class="card notif-card" id="card-${name}" style="padding: var(--space-4); border-color: var(--warning);">
+                                    <div class="flex gap-3 items-start">
+                                        <input type="checkbox" class="item-checkbox" value="${name}" checked
+                                            style="width: 18px; height: 18px; margin-top: 4px; accent-color: var(--accent); cursor: pointer;">
+                                        <div style="flex: 1;">
+                                            <div class="flex justify-between items-start mb-2">
+                                                <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">${name}</div>
+                                                <span class="badge badge-danger">${stock} ${unit} left</span>
+                                            </div>
+                                            <div class="flex justify-between items-center mt-3">
+                                                <div class="text-secondary" style="font-size: 12px;">Threshold: ${thresh}</div>
+                                                <div class="flex items-center gap-2">
+                                                    <label style="margin: 0; font-size: 12px;">Qty:</label>
+                                                    <input type="number" class="item-qty input-field" data-name="${name}" value="10" 
+                                                        style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            }
+                        }
+                        const grid = document.getElementById('notif-grid');
+                        if (grid.innerHTML.includes('Loading inventory data...') || grid.innerHTML.includes('Inventory is healthy!')) {
+                            if (lowStockHtml === '') {
+                                grid.innerHTML = `
+                                <div class="empty-state text-center" style="grid-column: 1 / -1; padding: var(--space-8);">
+                                    <div class="flex justify-center mb-3">
+                                        <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--success); opacity: 0.8;"></i>
+                                    </div>
+                                    <h2 style="font-size: 18px; font-weight: 600;">Inventory is healthy!</h2>
+                                    <p class="text-secondary mt-1">No items are currently below the critical threshold.</p>
+                                </div>`;
+                            } else {
+                                grid.innerHTML = lowStockHtml;
+                            }
+                        } else {
+                            // Grid has active draft cards. Append any new low-stock items that aren't already in the grid.
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = lowStockHtml;
+                            Array.from(tempDiv.children).forEach(child => {
+                                if (!document.getElementById(child.id)) {
+                                    grid.appendChild(child);
+                                }
+                            });
+                        }
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
                     }
                 }
             } catch (e) {
@@ -1123,23 +680,23 @@
                     }
 
                     return `
-                    <div class="glass-card" style="margin-bottom:1rem; padding:1.5rem;">
+                    <div class="card" style="margin-bottom:1rem;">
                         <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:1rem;">
                             <div>
-                                <span class="status-chip ${o.status === 'confirmed' ? 'chip-success' : (o.status === 'dispatched' ? 'chip-warning' : 'chip-info')}">${o.status.toUpperCase()}</span>
-                                <div style="font-weight:700; font-size:1.1rem; margin-top:5px;">${o.product_name}</div>
-                                <div style="color:#64748b; font-size:0.9rem;">From: ${o.wholesaler_name}</div>
+                                <span class="badge ${o.status === 'confirmed' ? 'badge-success' : (o.status === 'dispatched' ? 'badge-warning' : 'badge')}">${o.status.toUpperCase()}</span>
+                                <div style="font-weight:600; font-size:1.1rem; margin-top:8px;">${o.product_name}</div>
+                                <div class="text-secondary">From: ${o.wholesaler_name}</div>
                             </div>
                             <div style="text-align:right;">
-                                <div style="font-size:0.8rem; color:#94a3b8;">${new Date(o.created_at).toLocaleDateString()}</div>
+                                <div class="text-secondary">${new Date(o.created_at).toLocaleDateString()}</div>
                                 <div style="font-weight:600; margin-top:5px;">Qty: ${o.requested_qty} ${o.unit || ''}</div>
                             </div>
                         </div>
                         ${itemsHtml}
-                        ${o.note ? `<div style="background:#f8fafc; padding:10px; border-radius:10px; font-size:0.9rem; margin-bottom:1rem;">📝 ${o.note}</div>` : ''}
+                        ${o.note ? `<div style="display:flex; gap:8px; align-items:center; background:var(--bg-secondary); padding:10px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:1rem; color:var(--text-secondary);"><i data-lucide="file-text" style="width:14px; height:14px;"></i> ${o.note}</div>` : ''}
                         
                         ${o.status === 'dispatched' ? `
-                            <button onclick="confirmReceipt(this, ${o.id})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:10px; font-weight:700;">
+                            <button onclick="confirmReceipt(this, ${o.id})" class="btn btn-primary" style="width:100%; justify-content:center;">
                                 🚚 Confirm Receipt
                             </button>
                         ` : ''}
@@ -1252,9 +809,15 @@
             });
         }
 
+        let categoryChartInstance = null;
         function loadAnalyticsCharts() {
-            const ctx2 = document.getElementById('categoryChart').getContext('2d');
-            new Chart(ctx2, {
+            const canvas = document.getElementById('categoryChart');
+            if (!canvas) return;
+            const ctx2 = canvas.getContext('2d');
+            if (categoryChartInstance) {
+                categoryChartInstance.destroy();
+            }
+            categoryChartInstance = new Chart(ctx2, {
                 type: 'doughnut',
                 data: {
                     labels: ['Grocery', 'Dairy', 'Personal Care'],
@@ -1317,7 +880,7 @@
                     return;
                 }
                 data.forEach(row => {
-                    let badge = row.action === 'sale' ? '<span class="status-chip chip-success">SALE</span>' : '<span class="status-chip chip-warning">RESTOCK</span>';
+                    let badge = row.action === 'sale' ? '<span class="badge badge-success">SALE</span>' : '<span class="badge badge-warning">RESTOCK</span>';
                     let dateObj = new Date(row.timestamp);
                     let timeStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     let amount = row.total_amount ? `₹${row.total_amount}` : '-';
@@ -1497,17 +1060,25 @@
             if (msg.message_type === 'order_dispatch' && !isMine) {
                 extraHtml = `
                     <div style="margin-top:10px;">
-                        <button onclick="confirmReceipt(this, ${msg.order_id || 'null'})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:8px; font-weight:700;">
-                           🚚 Confirm Receipt
+                        <button onclick="confirmReceipt(this, ${msg.order_id || 'null'})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:8px; font-weight:700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                           <i data-lucide="truck" style="width: 18px; height: 18px;"></i> Confirm Receipt
                         </button>
                     </div>`;
             }
 
             const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
             div.className = `msg-bubble ${isMine ? 'mine' : 'theirs'} ${typeClass}`;
-            div.innerHTML  = `${escapeHtml(msg.text)}${extraHtml}<div class="msg-time">${time}</div>`;
+            
+            let cleanedText = msg.text.replace(/📦/g, '');
+            let safeText = escapeHtml(cleanedText).trim();
+            if (safeText.includes('LOW STOCK ALERT:') || safeText.includes('BULK RESTOCK ORDER') || safeText.includes('ORDER DISPATCHED:')) {
+                 safeText = `<div style="display:flex; gap:6px; align-items:start;"><i data-lucide="bell" style="width:16px; height:16px; flex-shrink:0; margin-top:2px;"></i><div>${safeText}</div></div>`;
+            }
+
+            div.innerHTML  = `${safeText}${extraHtml}<div class="msg-time">${time}</div>`;
             box.appendChild(div);
             if (scroll) box.scrollTop = box.scrollHeight;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
         async function confirmReceipt(btn, orderId) {
@@ -1527,14 +1098,16 @@
                     const err = await res.json().catch(() => ({}));
                     alert(`Error ${res.status}: ${err.error || 'Failed'}`);
                     btn.disabled = false;
-                    btn.innerHTML = '🚚 Confirm Receipt';
+                    btn.innerHTML = '<i data-lucide="truck" style="width: 18px; height: 18px;"></i> Confirm Receipt';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
                     return;
                 }
 
                 const data = await res.json();
                 if (data.success) {
-                    btn.style.background = '#059669';
-                    btn.innerHTML = '✅ Received & Confirmed';
+                    btn.style.background = 'var(--success)';
+                    btn.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; gap:8px;"><i data-lucide="check-check" style="width:16px; height:16px;"></i> Received & Confirmed</div>';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
                     btn.onclick = null;
                     if (typeof loadData === 'function') loadData();
                 } else {
@@ -1854,7 +1427,152 @@
             loadData();
             startAutoRefresh();
         });
-    </script>
-</body>
 
-</html>
+        // --- Notifications Module ---
+        function addManualItem() {
+            const select = document.getElementById('add-item-select');
+            const name = select.value;
+            if (!name) {
+                alert("Please select a product first.");
+                return;
+            }
+
+            const grid = document.getElementById('notif-grid');
+            const existing = document.getElementById(`card-${name}`);
+            if (existing) {
+                alert("Item already in list!");
+                return;
+            }
+
+            const empty = grid.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const html = `
+                <div class="card notif-card" id="card-${name}" style="padding: var(--space-4); border-color: var(--accent);">
+                    <div class="flex gap-3 items-start">
+                        <input type="checkbox" class="item-checkbox" value="${name}" checked
+                            style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div class="flex justify-between items-start mb-2">
+                                <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">${name}</div>
+                                <span class="badge" style="background-color: var(--accent-muted); color: var(--accent);">Selected</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-3">
+                                <div class="text-secondary" style="font-size: 12px;">Added Manually</div>
+                                <div class="flex items-center gap-2">
+                                    <label style="margin: 0; font-size: 12px;">Qty:</label>
+                                    <input type="number" class="item-qty input-field" data-name="${name}" value="10" 
+                                        style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.insertAdjacentHTML('afterbegin', html);
+        }
+
+        function addNewProductPrompt() {
+            const name = prompt("Enter the name of the new product:");
+            if (!name) return;
+
+            const grid = document.getElementById('notif-grid');
+            const existing = document.getElementById(`card-${name}`);
+            if (existing) {
+                alert("Item already in list!");
+                return;
+            }
+
+            const empty = grid.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const html = `
+                <div class="card notif-card" id="card-${name}" style="padding: var(--space-4); border-color: var(--success);">
+                    <div class="flex gap-3 items-start">
+                        <input type="checkbox" class="item-checkbox" value="${name}" checked
+                            style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div class="flex justify-between items-start mb-2">
+                                <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">${name}</div>
+                                <span class="badge badge-success">New Product</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-3">
+                                <div class="text-secondary" style="font-size: 12px;">Will be created</div>
+                                <div class="flex items-center gap-2">
+                                    <label style="margin: 0; font-size: 12px;">Qty:</label>
+                                    <input type="number" class="item-qty input-field" data-name="${name}" value="10" 
+                                        style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.insertAdjacentHTML('afterbegin', html);
+        }
+
+        async function sendBulkOrder() {
+            const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert("Please select at least one item.");
+                return;
+            }
+
+            const items = {};
+            checkboxes.forEach(cb => {
+                const name = cb.value;
+                const qtyInput = document.querySelector(`.item-qty[data-name="${name}"]`);
+                items[name] = qtyInput ? qtyInput.value : 1;
+            });
+
+            const extraText = document.getElementById('extra-text').value;
+            const btn = document.getElementById('bulk-order-btn');
+
+            btn.innerHTML = '<i data-lucide="loader" class="lucide-spin" style="width: 16px; height: 16px;"></i> Sending Order...';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/order_distributor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        items: items,
+                        extra_text: extraText
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    btn.style.backgroundColor = 'var(--success)';
+                    btn.innerHTML = '<i data-lucide="check" style="width: 16px; height: 16px;"></i> Order Sent via Chat!';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    setTimeout(() => {
+                        btn.style.backgroundColor = '';
+                        btn.innerHTML = '<i data-lucide="send" style="width: 16px; height: 16px;"></i> Send Order to Distributor';
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
+                        btn.disabled = false;
+                        
+                        // Clear inputs and reload data
+                        document.getElementById('extra-text').value = '';
+                        loadData();
+                    }, 3000);
+                } else {
+                    alert(data.message || "Failed to send order.");
+                    btn.innerHTML = '<i data-lucide="alert-triangle" style="width: 16px; height: 16px;"></i> Failed. Try Again';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                console.error(e);
+                btn.innerHTML = '<i data-lucide="alert-circle" style="width: 16px; height: 16px;"></i> Error! Try again';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                btn.disabled = false;
+            }
+        }
+    </script>
+    <style>
+        .lucide-spin { animation: spin 2s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+{% endblock %}

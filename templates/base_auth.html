@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}QuickStock{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quickstock.css') }}">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+        .theme-toggle-btn {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .theme-toggle-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle-btn" id="theme-toggle" aria-label="Toggle Theme">
+        <i data-lucide="sun" id="theme-icon"></i>
+    </button>
+    <div class="auth-container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Theme Toggle Logic
+        const toggle = document.getElementById('theme-toggle');
+        const icon = document.getElementById('theme-icon');
+        const root = document.documentElement;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        root.setAttribute('data-theme', savedTheme);
+        updateIcon(savedTheme);
+
+        toggle.addEventListener('click', () => {
+            const current = root.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateIcon(next);
+        });
+
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                icon.setAttribute('data-lucide', 'moon');
+            } else {
+                icon.setAttribute('data-lucide', 'sun');
+            }
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>

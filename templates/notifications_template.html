@@ -1,355 +1,237 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Low Stock Notifications | QuickStock</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
-    <style>
-        :root {
-            --bg-body: #f8fafc;
-            --surface: #ffffff;
-            --primary: #4f46e5;
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        }
+{% block title %}Low Stock Notifications | QuickStock{% endblock %}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Outfit', sans-serif;
-        }
+{% block page_title %}Low Stock Alerts{% endblock %}
 
-        body {
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            padding: 2.5rem;
-        }
+{% block sidebar_nav %}
+<a href="/dashboard" class="nav-link">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="/notifications" class="nav-link active">
+    <i data-lucide="bell"></i> <span>Notifications</span>
+</a>
+{% endblock %}
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2.5rem;
-        }
+{% block topbar_extra %}
+<i data-lucide="bell-ring" style="color: var(--danger); width: 20px; height: 20px;"></i>
+{% endblock %}
 
-        .btn-back {
-            text-decoration: none;
-            color: var(--text-muted);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: color 0.2s;
-        }
+{% block content %}
+<div class="mb-4">
+    <p class="text-secondary">Items that have fallen below their configured alert thresholds.</p>
+</div>
 
-        .btn-back:hover {
-            color: var(--primary);
-        }
-
-        .notifications-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .notif-card {
-            background: white;
-            border-radius: 24px;
-            padding: 1.8rem;
-            border: 1px solid #e2e8f0;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            transition: all 0.3s;
-        }
-
-        .notif-card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg);
-            border-color: #ef4444;
-        }
-
-        .notif-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        .item-name {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--text-main);
-        }
-
-        .stock-badge {
-            background: #fee2e2;
-            color: #ef4444;
-            padding: 6px 14px;
-            border-radius: 30px;
-            font-size: 0.85rem;
-            font-weight: 700;
-        }
-
-        .btn-order {
-            background: var(--primary-gradient);
-            color: white;
-            border: none;
-            padding: 1rem;
-            border-radius: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: all 0.3s;
-        }
-
-        .btn-order:hover {
-            filter: brightness(1.1);
-            transform: scale(1.02);
-        }
-
-        .btn-order:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 5rem;
-            grid-column: 1 / -1;
-            color: var(--text-muted);
-        }
-
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            color: #10b981;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="header">
-        <div>
-            <a href="/" class="btn-back"><i class="ri-arrow-left-line"></i> Back to Dashboard</a>
-            <h1 style="font-size: 2.2rem; font-weight: 800; margin-top: 10px;">Low Stock Alerts</h1>
-            <p style="color: var(--text-muted);">Items that have fallen below their configured alert thresholds.</p>
+<div class="card mb-6" style="padding: var(--space-5);">
+    <div class="flex justify-between items-start gap-4 flex-wrap">
+        <div style="flex: 1; min-width: 300px;">
+            <h2 class="mb-3">Recommended for Restock</h2>
+            <div class="flex gap-2 items-center">
+                <select id="add-item-select" class="input-field" style="flex: 1; max-width: 300px;">
+                    <option value="" disabled selected>Select an existing product...</option>
+                    {% for prod in all_products %}
+                    <option value="{{ prod }}">{{ prod }}</option>
+                    {% endfor %}
+                </select>
+                <button onclick="addManualItem()" class="btn">
+                    <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add
+                </button>
+                <button onclick="addNewProductPrompt()" class="btn" style="border-style: dashed;">
+                    <i data-lucide="star" style="width: 14px; height: 14px;"></i> New Product
+                </button>
+            </div>
         </div>
-        <i class="ri-notification-3-line" style="font-size: 2.5rem; color: #ef4444;"></i>
+        <button class="btn btn-primary" id="bulk-order-btn" onclick="sendBulkOrder()" style="height: 40px; padding: 0 20px;">
+            <i data-lucide="send" style="width: 16px; height: 16px;"></i> Send Order to Distributor
+        </button>
     </div>
+    
+    <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
+        <label class="mb-2" style="font-weight: 600; font-size: 13px;">Add Custom Note (Optional):</label>
+        <textarea id="extra-text" class="input-field" placeholder="e.g. Please deliver by tomorrow morning."
+            style="height: 80px; padding: var(--space-3); resize: vertical;"></textarea>
+    </div>
+</div>
 
-    <div style="margin-bottom: 2rem;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-end; gap: 20px;">
+<div class="notifications-grid" id="notif-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4);">
+    {% if items %}
+    {% for item in items %}
+    <div class="card notif-card" id="card-{{ item.name }}" style="padding: var(--space-4);">
+        <div class="flex gap-3 items-start">
+            <input type="checkbox" class="item-checkbox" value="{{ item.name }}" checked
+                style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); cursor: pointer;">
             <div style="flex: 1;">
-                <h2 style="font-size: 1.5rem; font-weight: 700;">Recommended for Restock</h2>
-                <div style="margin-top: 1rem; display: flex; gap: 10px; align-items: center;">
-                    <select id="add-item-select" 
-                        style="flex: 1; padding: 0.8rem; border-radius: 12px; border: 1px solid #e2e8f0; font-family: inherit; appearance: none; background: white; cursor: pointer;">
-                        <option value="" disabled selected>Select an existing product...</option>
-                        {% for prod in all_products %}
-                        <option value="{{ prod }}">{{ prod }}</option>
-                        {% endfor %}
-                    </select>
-                    <button onclick="addManualItem()" style="padding: 0.8rem 1.5rem; border-radius: 12px; background: #4f46e5; color: white; border: none; font-weight: 600; cursor: pointer; transition: 0.2s;">
-                        <i class="ri-add-line"></i> Add
-                    </button>
-                    <button onclick="addNewProductPrompt()" style="padding: 0.8rem 1.5rem; border-radius: 12px; background: #10b981; color: white; border: none; font-weight: 600; cursor: pointer; transition: 0.2s;">
-                        <i class="ri-star-line"></i> New Product
-                    </button>
+                <div class="flex justify-between items-start mb-2">
+                    <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">{{ item.name }}</div>
+                    <span class="badge badge-danger">{{ item.current_stock }} {{ item.unit }} left</span>
                 </div>
-            </div>
-            <button class="btn-order" id="bulk-order-btn" onclick="sendBulkOrder()"
-                style="padding: 0.8rem 2rem; border-radius: 12px; height: fit-content;">
-                <i class="ri-send-plane-fill"></i> Send Order to Distributor
-            </button>
-        </div>
-        <div
-            style="margin-top: 1.5rem; background:white; padding: 1.5rem; border-radius: 20px; border: 1px solid #e2e8f0;">
-            <label style="display:block; margin-bottom: 0.8rem; font-weight: 600; color: var(--text-main);">Add Custom
-                Note:</label>
-            <textarea id="extra-text" placeholder="e.g. Please deliver by tomorrow morning."
-                style="width: 100%; min-height: 60px; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 0.95rem;"></textarea>
-        </div>
-    </div>
-
-    <div class="notifications-grid" id="notif-grid">
-        {% if items %}
-        {% for item in items %}
-        <div class="notif-card" id="card-{{ item.name }}">
-            <div style="display: flex; gap: 15px; align-items: flex-start;">
-                <input type="checkbox" class="item-checkbox" value="{{ item.name }}" checked
-                    style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
-                <div style="flex: 1;">
-                    <div class="notif-header">
-                        <div class="item-name">{{ item.name }}</div>
-                        <div class="stock-badge">{{ item.current_stock }} {{ item.unit }} left</div>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px;">
-                        <div style="color: var(--text-muted); font-size: 0.9rem;">Threshold: {{ item.threshold }}</div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
-                            <input type="number" class="item-qty" data-name="{{ item.name }}" value="10" 
-                                style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
-                        </div>
+                <div class="flex justify-between items-center mt-3">
+                    <div class="text-secondary" style="font-size: 12px;">Threshold: {{ item.threshold }}</div>
+                    <div class="flex items-center gap-2">
+                        <label style="margin: 0; font-size: 12px;">Qty:</label>
+                        <input type="number" class="item-qty input-field" data-name="{{ item.name }}" value="10" 
+                            style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
                     </div>
                 </div>
             </div>
         </div>
-        {% endfor %}
-        {% else %}
-        <div class="empty-state">
-            <i class="ri-checkbox-circle-fill"></i>
-            <h2>Inventory is healthy!</h2>
-            <p>No items are currently below the critical threshold.</p>
-        </div>
-        {% endif %}
     </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state text-center" style="grid-column: 1 / -1; padding: var(--space-8);">
+        <div class="flex justify-center mb-3">
+            <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--success); opacity: 0.8;"></i>
+        </div>
+        <h2 style="font-size: 18px; font-weight: 600;">Inventory is healthy!</h2>
+        <p class="text-secondary mt-1">No items are currently below the critical threshold.</p>
+    </div>
+    {% endif %}
+</div>
 
-    <script>
-        function addManualItem() {
-            const select = document.getElementById('add-item-select');
-            const name = select.value;
-            if (!name) {
-                alert("Please select a product first.");
-                return;
-            }
+{% endblock %}
 
-            const grid = document.getElementById('notif-grid');
-            const existing = document.getElementById(`card-${name}`);
-            if (existing) {
-                alert("Item already in list!");
-                return;
-            }
+{% block scripts %}
+<script>
+    function addManualItem() {
+        const select = document.getElementById('add-item-select');
+        const name = select.value;
+        if (!name) {
+            alert("Please select a product first.");
+            return;
+        }
 
-            // Remove empty state if present
-            const empty = grid.querySelector('.empty-state');
-            if (empty) empty.remove();
+        const grid = document.getElementById('notif-grid');
+        const existing = document.getElementById(`card-${name}`);
+        if (existing) {
+            alert("Item already in list!");
+            return;
+        }
 
-            const html = `
-                <div class="notif-card" id="card-${name}" style="border-color: #cbd5e1;">
-                    <div style="display: flex; gap: 15px; align-items: flex-start;">
-                        <input type="checkbox" class="item-checkbox" value="${name}" checked
-                            style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
-                        <div style="flex: 1;">
-                            <div class="notif-header">
-                                <div class="item-name">${name}</div>
-                                <div class="stock-badge" style="background:#e2e8f0; color:#475569;">Selected</div>
-                            </div>
-                            <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
-                                    <input type="number" class="item-qty" data-name="${name}" value="10" 
-                                        style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
-                                </div>
+        const empty = grid.querySelector('.empty-state');
+        if (empty) empty.remove();
+
+        const html = `
+            <div class="card notif-card" id="card-${name}" style="padding: var(--space-4); border-color: var(--accent);">
+                <div class="flex gap-3 items-start">
+                    <input type="checkbox" class="item-checkbox" value="${name}" checked
+                        style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); cursor: pointer;">
+                    <div style="flex: 1;">
+                        <div class="flex justify-between items-start mb-2">
+                            <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">${name}</div>
+                            <span class="badge" style="background-color: var(--accent-muted); color: var(--accent);">Selected</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-3">
+                            <div class="text-secondary" style="font-size: 12px;">Added Manually</div>
+                            <div class="flex items-center gap-2">
+                                <label style="margin: 0; font-size: 12px;">Qty:</label>
+                                <input type="number" class="item-qty input-field" data-name="${name}" value="10" 
+                                    style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
-            grid.insertAdjacentHTML('afterbegin', html);
+            </div>
+        `;
+        grid.insertAdjacentHTML('afterbegin', html);
+    }
+
+    function addNewProductPrompt() {
+        const name = prompt("Enter the name of the new product:");
+        if (!name) return;
+
+        const grid = document.getElementById('notif-grid');
+        const existing = document.getElementById(`card-${name}`);
+        if (existing) {
+            alert("Item already in list!");
+            return;
         }
 
-        function addNewProductPrompt() {
-            const name = prompt("Enter the name of the new product:");
-            if (!name) return;
+        const empty = grid.querySelector('.empty-state');
+        if (empty) empty.remove();
 
-            const grid = document.getElementById('notif-grid');
-            const existing = document.getElementById(`card-${name}`);
-            if (existing) {
-                alert("Item already in list!");
-                return;
-            }
-
-            // Remove empty state if present
-            const empty = grid.querySelector('.empty-state');
-            if (empty) empty.remove();
-
-            const html = `
-                <div class="notif-card" id="card-${name}" style="border-color: #10b981;">
-                    <div style="display: flex; gap: 15px; align-items: flex-start;">
-                        <input type="checkbox" class="item-checkbox" value="${name}" checked
-                            style="width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); margin-top: 5px;">
-                        <div style="flex: 1;">
-                            <div class="notif-header">
-                                <div class="item-name">${name}</div>
-                                <div class="stock-badge" style="background:#dcfce7; color:#166534;">New Product</div>
-                            </div>
-                            <div style="display: flex; align-items: center; justify-content: flex-end; margin-top: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <label style="font-size: 0.85rem; font-weight: 600;">Qty:</label>
-                                    <input type="number" class="item-qty" data-name="${name}" value="10" 
-                                        style="width: 70px; padding: 5px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center;">
-                                </div>
+        const html = `
+            <div class="card notif-card" id="card-${name}" style="padding: var(--space-4); border-color: var(--success);">
+                <div class="flex gap-3 items-start">
+                    <input type="checkbox" class="item-checkbox" value="${name}" checked
+                        style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); cursor: pointer;">
+                    <div style="flex: 1;">
+                        <div class="flex justify-between items-start mb-2">
+                            <div style="font-weight: 600; font-size: 15px; color: var(--text-primary);">${name}</div>
+                            <span class="badge badge-success">New Product</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-3">
+                            <div class="text-secondary" style="font-size: 12px;">Will be created</div>
+                            <div class="flex items-center gap-2">
+                                <label style="margin: 0; font-size: 12px;">Qty:</label>
+                                <input type="number" class="item-qty input-field" data-name="${name}" value="10" 
+                                    style="width: 60px; height: 28px; padding: 0 8px; text-align: center;">
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
-            grid.insertAdjacentHTML('afterbegin', html);
+            </div>
+        `;
+        grid.insertAdjacentHTML('afterbegin', html);
+    }
+
+    async function sendBulkOrder() {
+        const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert("Please select at least one item.");
+            return;
         }
 
-        async function sendBulkOrder() {
-            const checkboxes = document.querySelectorAll('.item-checkbox:checked');
-            if (checkboxes.length === 0) {
-                alert("Please select at least one item.");
-                return;
-            }
+        const items = {};
+        checkboxes.forEach(cb => {
+            const name = cb.value;
+            const qtyInput = document.querySelector(`.item-qty[data-name="${name}"]`);
+            items[name] = qtyInput ? qtyInput.value : 1;
+        });
 
-            const items = {};
-            checkboxes.forEach(cb => {
-                const name = cb.value;
-                const qtyInput = document.querySelector(`.item-qty[data-name="${name}"]`);
-                items[name] = qtyInput ? qtyInput.value : 1;
+        const extraText = document.getElementById('extra-text').value;
+        const btn = document.getElementById('bulk-order-btn');
+
+        btn.innerHTML = '<i data-lucide="loader" class="lucide-spin" style="width: 16px; height: 16px;"></i> Sending Order...';
+        lucide.createIcons();
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/order_distributor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: items,
+                    extra_text: extraText
+                })
             });
+            const data = await res.json();
 
-            const extraText = document.getElementById('extra-text').value;
-            const btn = document.getElementById('bulk-order-btn');
-
-            btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> Sending Order...';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/order_distributor', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        items: items,
-                        extra_text: extraText
-                    })
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    btn.style.background = '#10b981';
-                    btn.innerHTML = '<i class="ri-check-line"></i> Order Sent via Chat!';
-                    setTimeout(() => {
-                        btn.style.background = '';
-                        btn.innerHTML = '<i class="ri-send-plane-fill"></i> Send Order to Distributor';
-                        btn.disabled = false;
-                    }, 3000);
-                } else {
-                    alert(data.message || "Failed to send order.");
-                    btn.innerHTML = '<i class="ri-error-warning-line"></i> Failed. Try Again';
+            if (data.success) {
+                btn.style.backgroundColor = 'var(--success)';
+                btn.innerHTML = '<i data-lucide="check" style="width: 16px; height: 16px;"></i> Order Sent via Chat!';
+                lucide.createIcons();
+                setTimeout(() => {
+                    btn.style.backgroundColor = '';
+                    btn.innerHTML = '<i data-lucide="send" style="width: 16px; height: 16px;"></i> Send Order to Distributor';
+                    lucide.createIcons();
                     btn.disabled = false;
-                }
-            } catch (e) {
-                console.error(e);
-                btn.innerHTML = 'Error! Try again';
+                }, 3000);
+            } else {
+                alert(data.message || "Failed to send order.");
+                btn.innerHTML = '<i data-lucide="alert-triangle" style="width: 16px; height: 16px;"></i> Failed. Try Again';
+                lucide.createIcons();
                 btn.disabled = false;
             }
+        } catch (e) {
+            console.error(e);
+            btn.innerHTML = '<i data-lucide="alert-circle" style="width: 16px; height: 16px;"></i> Error! Try again';
+            lucide.createIcons();
+            btn.disabled = false;
         }
-    </script>
-</body>
-
-</html>
+    }
+</script>
+<style>
+    .lucide-spin { animation: spin 2s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+{% endblock %}

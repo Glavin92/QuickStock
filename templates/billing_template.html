@@ -1,190 +1,155 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>QuickStock — Billing</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Outfit', sans-serif; background: #f1f5f9; }
-        .header { background: #111827; color: white; padding: 16px 28px;
-                  font-size: 20px; font-weight: 700; }
-        .layout { display: grid; grid-template-columns: 1fr 420px;
-                  gap: 24px; padding: 24px; max-width: 1400px; margin: auto; }
+{% extends "base.html" %}
 
-        /* LEFT — Bill Builder */
-        .card { background: white; border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,.07); padding: 24px; }
-        .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px;
-                   color: #111; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-        input, select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
-                        border-radius: 8px; font-size: 14px; font-family: inherit; }
-        input:focus, select:focus { outline: none; border-color: #2563eb; }
-        label { font-size: 13px; color: #6b7280; margin-bottom: 4px; display: block; }
+{% block title %}QuickStock — Billing{% endblock %}
 
-        /* Item rows */
-        .item-row { display: grid; grid-template-columns: 2fr 80px 100px 100px 36px;
-                    gap: 8px; align-items: center; margin-bottom: 8px; }
-        .item-row input { font-size: 13px; }
-        .remove-btn { background: #fee2e2; border: none; color: #dc2626;
-                      border-radius: 6px; cursor: pointer; padding: 8px; font-size: 16px; }
-        .add-item-btn { background: #eff6ff; color: #2563eb; border: 1px dashed #2563eb;
-                        border-radius: 8px; padding: 10px; width: 100%; cursor: pointer;
-                        font-size: 14px; font-weight: 600; margin: 8px 0 16px; }
-        .totals-box { background: #f9fafb; border-radius: 8px; padding: 14px; margin-top: 12px; }
-        .totals-row { display: flex; justify-content: space-between;
-                      font-size: 14px; margin-bottom: 6px; color: #374151; }
-        .totals-row.grand { font-weight: 700; font-size: 18px; color: #111; margin-top: 8px; }
-        .btn-primary { background: #2563eb; color: white; border: none;
-                       border-radius: 8px; padding: 14px; width: 100%; font-size: 15px;
-                       font-weight: 700; cursor: pointer; margin-top: 14px; }
-        .btn-primary:hover { background: #1e4fd4; }
+{% block page_title %}New Bill{% endblock %}
 
-        /* RIGHT — Preview */
-        .preview-card { position: sticky; top: 24px; }
-        #bill-preview { font-size: 13px; }
-        .preview-header { text-align: center; margin-bottom: 12px; }
-        .preview-header h3 { font-size: 18px; font-weight: 700; }
-        .preview-header p { color: #6b7280; font-size: 12px; }
-        .preview-divider { border: none; border-top: 1px dashed #d1d5db; margin: 10px 0; }
-        .preview-items th { text-align: left; font-size: 12px;
-                            color: #6b7280; padding-bottom: 6px; }
-        .preview-items td { padding: 4px 0; font-size: 13px; }
-        .preview-items td:last-child { text-align: right; }
-        .preview-total-row { display: flex; justify-content: space-between;
-                             font-size: 13px; margin: 3px 0; }
-        .preview-grand { font-weight: 700; font-size: 16px; margin-top: 6px; }
-        .preview-actions { display: flex; gap: 10px; margin-top: 16px; }
-        .btn-print { flex: 1; background: #111827; color: white; border: none;
-                     border-radius: 8px; padding: 12px; font-size: 14px;
-                     font-weight: 600; cursor: pointer; }
-        .btn-save { flex: 1; background: #16a34a; color: white; border: none;
-                    border-radius: 8px; padding: 12px; font-size: 14px;
-                    font-weight: 600; cursor: pointer; }
+{% block sidebar_nav %}
+<a href="/dashboard" class="nav-link">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="#" class="nav-link active">
+    <i data-lucide="receipt"></i> <span>Billing</span>
+</a>
+{% endblock %}
 
-        /* PRINT STYLES — only bill receipt shows when printing */
-        @media print {
-            body * { visibility: hidden; }
-            #printable-bill, #printable-bill * { visibility: visible; }
-            #printable-bill { position: absolute; top: 0; left: 0; width: 80mm;
-                              font-family: monospace; font-size: 12px; padding: 10px; }
-        }
-    </style>
-</head>
-<body>
-<div class="header">🧾 QuickStock — New Bill</div>
-
-<div class="layout">
+{% block content %}
+<div style="display: grid; grid-template-columns: 1fr 400px; gap: var(--space-6);">
     <!-- LEFT: Bill Builder -->
     <div>
-        <div class="card" style="margin-bottom:16px">
-            <h2>Customer Details</h2>
-            <div class="form-row">
-                <div>
+        <div class="card mb-4">
+            <h2 class="mb-3" style="border-bottom: 1px solid var(--border); padding-bottom: var(--space-2);">Customer Details</h2>
+            <div class="flex gap-3 mb-3">
+                <div class="form-group w-full mb-0">
                     <label>Customer Name (optional)</label>
-                    <input type="text" id="cust-name" placeholder="Walk-in Customer">
+                    <input type="text" id="cust-name" class="input-field" placeholder="Walk-in Customer">
                 </div>
-                <div>
+                <div class="form-group w-full mb-0">
                     <label>Phone (optional)</label>
-                    <input type="tel" id="cust-phone" placeholder="9XXXXXXXXX">
+                    <input type="tel" id="cust-phone" class="input-field" placeholder="9XXXXXXXXX">
                 </div>
             </div>
-            <div class="form-row">
-                <div>
+            <div class="flex gap-3">
+                <div class="form-group w-full mb-0">
                     <label>Payment Mode</label>
-                    <select id="payment-mode">
-                        <option value="cash">💵 Cash</option>
-                        <option value="upi">📱 UPI</option>
-                        <option value="card">💳 Card</option>
+                    <select id="payment-mode" class="input-field" style="appearance: none; padding-right: 24px; background: var(--bg-input) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%236B6B6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat right 8px center;">
+                        <option value="cash">Cash</option>
+                        <option value="upi">UPI</option>
+                        <option value="card">Card</option>
                     </select>
                 </div>
-                <div>
+                <div class="form-group w-full mb-0">
                     <label>GST %</label>
-                    <input type="number" id="gst-percent" value="18" min="0" max="28" oninput="updatePreview()">
+                    <input type="number" id="gst-percent" class="input-field" value="18" min="0" max="28" oninput="updatePreview()">
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <h2>Items</h2>
-            <div class="item-row" style="font-size:12px;color:#6b7280;font-weight:600;margin-bottom:4px">
+            <h2 class="mb-3" style="border-bottom: 1px solid var(--border); padding-bottom: var(--space-2);">Items</h2>
+            <div style="display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); font-weight: 500;">
                 <span>Product</span><span>Qty</span><span>Unit</span><span>Price</span><span></span>
             </div>
             <div id="items-container"></div>
-            <button class="add-item-btn" onclick="addItemRow()">＋ Add Item</button>
+            
+            <button class="btn mt-3" onclick="addItemRow()" style="width: 100%; border: 1px dashed var(--border);">
+                <i data-lucide="plus" style="width:16px;height:16px;"></i> Add Item
+            </button>
 
-            <div>
+            <div class="form-group mt-4 mb-0">
                 <label>Discount (₹)</label>
-                <input type="number" id="discount" value="0" min="0" oninput="updatePreview()" style="width:160px">
+                <input type="number" id="discount" class="input-field" value="0" min="0" oninput="updatePreview()" style="max-width: 160px;">
             </div>
 
-            <div class="totals-box" id="totals-box">
-                <div class="totals-row"><span>Subtotal</span><span id="t-subtotal">₹0.00</span></div>
-                <div class="totals-row"><span>Discount</span><span id="t-discount">-₹0.00</span></div>
-                <div class="totals-row"><span>GST (<span id="t-gst-pct">18</span>%)</span><span id="t-gst">₹0.00</span></div>
-                <hr style="border-top:1px solid #e5e7eb;margin:8px 0">
-                <div class="totals-row grand"><span>Total</span><span id="t-total">₹0.00</span></div>
+            <div style="background: var(--bg-hover); border-radius: var(--radius-md); padding: var(--space-4); margin-top: var(--space-4);">
+                <div class="flex justify-between mb-2 text-secondary" style="font-size: 13px;"><span>Subtotal</span><span id="t-subtotal" style="color: var(--text-primary);">₹0.00</span></div>
+                <div class="flex justify-between mb-2 text-secondary" style="font-size: 13px;"><span>Discount</span><span id="t-discount" style="color: var(--text-primary);">-₹0.00</span></div>
+                <div class="flex justify-between mb-3 text-secondary" style="font-size: 13px;"><span>GST (<span id="t-gst-pct">18</span>%)</span><span id="t-gst" style="color: var(--text-primary);">₹0.00</span></div>
+                <hr style="border-top: 1px solid var(--border); margin: 0 0 var(--space-2) 0;">
+                <div class="flex justify-between" style="font-size: 16px; font-weight: 600;"><span>Total</span><span id="t-total">₹0.00</span></div>
             </div>
 
-            <button class="btn-primary" onclick="saveBill()">
-                <i class="ri-save-line"></i> Save Bill & Update Inventory
+            <button class="btn btn-primary w-full mt-4" onclick="saveBill()">
+                <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save Bill & Update Inventory
             </button>
         </div>
     </div>
 
     <!-- RIGHT: Live Preview -->
-    <div class="preview-card">
-        <div class="card">
-            <h2>Live Preview</h2>
-            <div id="bill-preview">
-                <div class="preview-header">
-                    <h3 id="prev-shopname">Your Shop</h3>
-                    <p id="prev-shopaddr"></p>
-                    <p id="prev-shopphone"></p>
+    <div>
+        <div class="card" style="position: sticky; top: var(--space-6);">
+            <div class="flex justify-between items-center mb-3" style="border-bottom: 1px solid var(--border); padding-bottom: var(--space-2);">
+                <h2 class="m-0">Live Preview</h2>
+            </div>
+            
+            <div id="bill-preview" style="background: var(--bg-primary); padding: var(--space-4); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="font-weight: 600; font-size: 16px;" id="prev-shopname">Your Shop</div>
+                    <div id="prev-shopaddr"></div>
+                    <div id="prev-shopphone"></div>
                 </div>
-                <hr class="preview-divider">
-                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <div style="border-top: 1px dashed var(--border); margin-bottom: 8px;"></div>
+                <div class="flex justify-between mb-2">
                     <span>Bill: <strong id="prev-billno">DRAFT</strong></span>
                     <span id="prev-date"></span>
                 </div>
-                <div style="font-size:12px;margin-bottom:8px">
-                    Customer: <span id="prev-cust">Walk-in</span>
-                </div>
-                <hr class="preview-divider">
-                <table class="preview-items" width="100%">
+                <div class="mb-2">Customer: <span id="prev-cust">Walk-in</span></div>
+                <div style="border-top: 1px dashed var(--border); margin-bottom: 8px;"></div>
+                <table style="width: 100%; font-size: 12px; margin-bottom: 8px;">
                     <thead>
                         <tr>
-                            <th>Item</th><th>Qty</th><th style="text-align:right">Amount</th>
+                            <th style="padding: 4px 0; text-align: left; background: none; border-bottom: none;">Item</th>
+                            <th style="padding: 4px 0; text-align: left; background: none; border-bottom: none;">Qty</th>
+                            <th style="padding: 4px 0; text-align: right; background: none; border-bottom: none;">Amount</th>
                         </tr>
                     </thead>
                     <tbody id="prev-items"></tbody>
                 </table>
-                <hr class="preview-divider">
-                <div class="preview-total-row"><span>Subtotal</span><span id="pv-sub">₹0</span></div>
-                <div class="preview-total-row"><span>Discount</span><span id="pv-disc">-₹0</span></div>
-                <div class="preview-total-row"><span>GST</span><span id="pv-gst">₹0</span></div>
-                <hr class="preview-divider">
-                <div class="preview-total-row preview-grand">
-                    <span>TOTAL</span><span id="pv-total">₹0</span>
+                <div style="border-top: 1px dashed var(--border); margin-bottom: 8px; padding-top: 8px;">
+                    <div class="flex justify-between mb-1"><span>Subtotal</span><span id="pv-sub">₹0.00</span></div>
+                    <div class="flex justify-between mb-1"><span>Discount</span><span id="pv-disc">-₹0.00</span></div>
+                    <div class="flex justify-between mb-1"><span>GST</span><span id="pv-gst">₹0.00</span></div>
                 </div>
-                <div style="text-align:center;margin-top:12px;font-size:11px;color:#9ca3af">
-                    Thank you! Visit Again 🙏
+                <div style="border-top: 1px dashed var(--border); margin-bottom: 8px; padding-top: 8px;">
+                    <div class="flex justify-between" style="font-weight: 600; font-size: 14px;"><span>TOTAL</span><span id="pv-total">₹0.00</span></div>
                 </div>
+                <div class="text-center mt-3 text-secondary" style="font-size: 11px;">Thank you! Visit Again 🙏</div>
             </div>
 
-            <div class="preview-actions">
-                <button class="btn-print" onclick="printBill()">🖨️ Print</button>
-                <button class="btn-save" onclick="saveBill()">💾 Save</button>
+            <div class="flex gap-2 mt-4">
+                <button class="btn w-full justify-center" onclick="printBill()">
+                    <i data-lucide="printer" style="width: 16px; height: 16px;"></i> Print
+                </button>
+                <button class="btn btn-primary w-full justify-center" onclick="saveBill()">
+                    <i data-lucide="save" style="width: 16px; height: 16px;"></i> Save
+                </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Hidden printable receipt (80mm thermal format) -->
 <div id="printable-bill" style="display:none"></div>
 
+<style>
+    .item-row { display: grid; grid-template-columns: 2fr 80px 100px 100px 36px; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .item-row input { height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; background: var(--bg-input); color: var(--text-primary); }
+    .item-row input:focus { border-color: var(--accent); }
+    .remove-btn { height: 32px; background: var(--danger-muted); border: none; color: var(--danger); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .remove-btn:hover { background: #fecaca; }
+    
+    @media print {
+        body * { visibility: hidden !important; }
+        #printable-bill, #printable-bill * { visibility: visible !important; }
+        #printable-bill {
+            position: absolute !important; left: 50% !important; top: 0 !important;
+            transform: translateX(-50%) !important; width: 80mm !important; max-width: 80mm !important;
+            padding: 10px !important; box-sizing: border-box !important; font-size: 13px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
 <script>
 let inventory = {};
 let savedBillId = null;
@@ -334,5 +299,35 @@ document.addEventListener('input', e => {
     if (e.target.id === 'cust-name') updatePreview();
 });
 </script>
-</body>
-</html>
+<script>
+    // Overriding addItemRow to use the new HTML classes
+    function addItemRow(product='', qty=1, unit='', price=0) {
+        const container = document.getElementById('items-container');
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        const productOptions = Object.keys(inventory).map(p => `<option value="${p}">`).join('');
+        row.innerHTML = `
+            <input type="text" placeholder="Product" class="item-product" list="product-list" oninput="autofillPrice(this)" onchange="updatePreview()">
+            <input type="number" value="1" min="0.1" step="0.1" class="item-qty" oninput="updatePreview()">
+            <input type="text" placeholder="unit" class="item-unit" oninput="updatePreview()">
+            <input type="number" value="0" min="0" step="0.5" class="item-price" oninput="updatePreview()">
+            <button class="remove-btn" onclick="this.parentElement.remove(); updatePreview()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+        `;
+        container.appendChild(row);
+        if (!document.getElementById('product-list')) {
+            const dl = document.createElement('datalist');
+            dl.id = 'product-list';
+            dl.innerHTML = productOptions;
+            document.body.appendChild(dl);
+        }
+        if (product) {
+            row.querySelector('.item-product').value = product;
+            row.querySelector('.item-qty').value = qty;
+            row.querySelector('.item-unit').value = unit;
+            row.querySelector('.item-price').value = price;
+        }
+        lucide.createIcons();
+        updatePreview();
+    }
+</script>
+{% endblock %}

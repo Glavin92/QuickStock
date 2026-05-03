@@ -1,53 +1,67 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bill History - QuickStock</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold text-gray-800 mb-8">Bill History</h1>
-        
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <table class="w-full text-left">
-                <thead class="bg-gray-100">
-                    <tr>
-                        <th class="px-6 py-4 font-semibold text-gray-700">Bill Number</th>
-                        <th class="px-6 py-4 font-semibold text-gray-700">Customer</th>
-                        <th class="px-6 py-4 font-semibold text-gray-700">Date</th>
-                        <th class="px-6 py-4 font-semibold text-gray-700">Total</th>
-                        <th class="px-6 py-4 font-semibold text-gray-700">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200">
-                    {% for bill in bills %}
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-6 py-4 font-medium text-blue-600">{{ bill[1] }}</td>
-                        <td class="px-6 py-4 text-gray-600">{{ bill[2] }}</td>
-                        <td class="px-6 py-4 text-gray-500">{{ bill[5].strftime('%d %b, %Y') }}</td>
-                        <td class="px-6 py-4 font-bold text-gray-800">₹{{ bill[3] }}</td>
-                        <td class="px-6 py-4">
-                            <a href="/billing/print/{{ bill[0] }}" target="_blank" class="text-blue-500 hover:text-blue-700 flex items-center gap-1">
-                                🖨️ Print
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+{% extends "base.html" %}
 
-        <div class="mt-6 flex justify-between items-center">
-            <a href="{{ url_for('bill_history', page=page-1) if page > 1 else '#' }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg {{ 'opacity-50 cursor-not-allowed' if page == 1 else 'hover:bg-gray-50' }}">
-                Previous
-            </a>
-            <span class="text-gray-600">Page {{ page }}</span>
-            <a href="{{ url_for('bill_history', page=page+1) }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                Next
-            </a>
-        </div>
+{% block title %}Bill History - QuickStock{% endblock %}
+
+{% block page_title %}Bill History{% endblock %}
+
+{% block sidebar_nav %}
+<a href="/dashboard" class="nav-link">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="/billing" class="nav-link">
+    <i data-lucide="receipt"></i> <span>Billing</span>
+</a>
+<a href="#" class="nav-link active">
+    <i data-lucide="history"></i> <span>History</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="padding: 0;">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Bill Number</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for bill in bills %}
+                <tr>
+                    <td style="font-weight: 500; color: var(--accent);">{{ bill[1] }}</td>
+                    <td>{{ bill[2] }}</td>
+                    <td class="text-secondary">{{ bill[5].strftime('%d %b, %Y') }}</td>
+                    <td style="font-weight: 600;">₹{{ bill[3] }}</td>
+                    <td>
+                        <a href="/billing/print/{{ bill[0] }}" target="_blank" class="btn" style="height: 28px; padding: 0 10px;">
+                            <i data-lucide="printer" style="width: 14px; height: 14px;"></i> Print
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-secondary py-4" style="text-align: center; padding: var(--space-6);">
+                        <i data-lucide="receipt" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: var(--space-2); display: block; margin-left: auto; margin-right: auto;"></i>
+                        No billing history found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-</body>
-</html>
+</div>
+
+<div class="flex justify-between items-center mt-4">
+    <a href="{{ url_for('bill_history', page=page-1) if page > 1 else '#' }}" class="btn {% if page == 1 %}disabled{% endif %}" {% if page == 1 %}style="opacity: 0.5; pointer-events: none;"{% endif %}>
+        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Previous
+    </a>
+    <span class="text-secondary" style="font-size: 13px;">Page {{ page }}</span>
+    <a href="{{ url_for('bill_history', page=page+1) }}" class="btn">
+        Next <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+    </a>
+</div>
+{% endblock %}

@@ -1,110 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Trends | QuickStock</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
-    <style>
-        :root {
-            --bg-body: #f1f5f9;
-            --surface: #ffffff;
-            --primary: #4f46e5;
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-        }
+{% block title %}Market Trends | QuickStock{% endblock %}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Outfit', sans-serif;
-        }
+{% block page_title %}Global Market Trends{% endblock %}
 
-        body {
-            background-color: var(--bg-body);
-            color: var(--text-main);
-            padding: 2.5rem;
-        }
+{% block sidebar_nav %}
+<a href="/dashboard" class="nav-link">
+    <i data-lucide="layout-dashboard"></i> <span>Dashboard</span>
+</a>
+<a href="/market-trends" class="nav-link active">
+    <i data-lucide="trending-up"></i> <span>Market Trends</span>
+</a>
+{% endblock %}
 
-        .header {
-            margin-bottom: 2.5rem;
-        }
+{% block content %}
+<div class="mb-4">
+    <p class="text-secondary">See what's selling fast in other neighborhood shops.</p>
+</div>
 
-        .btn-back {
-            text-decoration: none;
-            color: var(--text-muted);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .trends-container {
-            background: white;
-            border-radius: 30px;
-            padding: 2rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1.5rem;
-        }
-
-        th {
-            text-align: left;
-            padding: 1.2rem;
-            color: var(--text-muted);
-            font-weight: 600;
-            border-bottom: 2px solid #f1f5f9;
-        }
-
-        td {
-            padding: 1.5rem;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .trend-up {
-            color: #10b981;
-            font-weight: 700;
-        }
-
-        .trend-down {
-            color: #ef4444;
-            font-weight: 700;
-        }
-
-        .btn-buy {
-            background: #f1f5f9;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-buy:hover {
-            background: var(--primary);
-            color: white;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="header">
-        <a href="/" class="btn-back"><i class="ri-arrow-left-line"></i> Dashboard</a>
-        <h1 style="font-size: 2.2rem; font-weight: 800;">Global Market Trends</h1>
-        <p style="color: var(--text-muted);">See what's selling fast in other neighborhood shops.</p>
-    </div>
-
-    <div class="trends-container">
+<div class="card" style="padding: 0;">
+    <div class="table-container">
         <table>
             <thead>
                 <tr>
@@ -118,31 +33,44 @@
             <tbody>
                 {% for trend in trends %}
                 <tr>
-                    <td style="font-weight: 700;">{{ trend.item }}</td>
+                    <td style="font-weight: 600;">{{ trend.item }}</td>
                     <td>
-                        <span
-                            style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">
+                        <span class="badge" style="background-color: var(--accent-muted); color: var(--accent);">
                             {{ trend.demand }}
                         </span>
                     </td>
                     <td>{{ trend.avg_price }}</td>
-                    <td
-                        class="{{ 'trend-up' if trend.trend == 'Up' else 'trend-down' if trend.trend == 'Down' else '' }}">
-                        <i
-                            class="ri-arrow-{{ 'up' if trend.trend == 'Up' else 'down' if trend.trend == 'Down' else 'right' }}-line"></i>
-                        {{ trend.trend }}
+                    <td>
+                        {% if trend.trend == 'Up' %}
+                        <span style="color: var(--success); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="trending-up" style="width: 14px; height: 14px;"></i> Up
+                        </span>
+                        {% elif trend.trend == 'Down' %}
+                        <span style="color: var(--danger); font-weight: 600; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="trending-down" style="width: 14px; height: 14px;"></i> Down
+                        </span>
+                        {% else %}
+                        <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="minus" style="width: 14px; height: 14px;"></i> Stable
+                        </span>
+                        {% endif %}
                     </td>
                     <td>
-                        <button class="btn-buy"
+                        <button class="btn" style="height: 28px; padding: 0 10px;"
                             onclick="alert('Order request for {{ trend.item }} sent to distributor!')">
-                            Add to Store
+                            <i data-lucide="plus" style="width: 14px; height: 14px;"></i> Add to Store
                         </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-secondary py-4" style="text-align: center; padding: var(--space-6);">
+                        No market trends data available at the moment.
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</body>
-
-</html>
+</div>
+{% endblock %}
