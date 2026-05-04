@@ -1,6 +1,7 @@
 import requests
 from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for, flash, abort
 import os
+import time
 import re
 import json
 import csv
@@ -533,8 +534,16 @@ live_bill_cart = {
     "payment_mode": "cash"
 }
 
-# Global status of Android Client
+# --- Global State & Caches ---
+pending_confirmations = []
 android_client_connected = False
+
+# User-specific stats cache: {user_id: {"timestamp": float, "data": dict}}
+_dashboard_stats_cache = {}
+_stats_cache_duration = 15.0 # seconds
+
+# Global status of Android Client
+# android_client_connected is already defined above in Global State & Caches section
 
 # Hindi to English product name mapping
 product_name_english = {
@@ -755,12 +764,12 @@ def preprocess_text(text):
     return text
 
 # Enhanced helper function for product name matching (no fuzzy)
-def find_product(product_name):
-    """Finds a product by fuzzy name matching."""
+def find_product(product_name, inventory=None):
+    """Finds a product by name matching."""
     product_name = product_name.strip()
     print(f"[DEBUG] find_product input: '{product_name}'")
     
-    current_products = get_all_products_db()
+    current_products = inventory if inventory is not None else get_all_products_db()
 
     # Exact match
     if product_name in current_products:
@@ -810,8 +819,16 @@ def find_product(product_name):
 
     
     if product_name in hindi_to_english:
-        print(f"[DEBUG] find_product mapped '{product_name}' -> '{hindi_to_english[product_name]}'")
-        return hindi_to_english[product_name]
+        mapped_name = hindi_to_english[product_name]
+        print(f"[DEBUG] find_product mapped '{product_name}' -> '{mapped_name}'")
+        return mapped_name
+
+    # Check the global English-to-Hindi mapping
+    name_lower = product_name.lower()
+    for hi, en in product_name_english.items():
+        if en.lower() == name_lower:
+            print(f"[DEBUG] find_product mapped English '{product_name}' -> Hindi '{hi}'")
+            return hi
 
     # Fuzzy fallback (difflib) for Devanagari names
     if len(product_name) >= 3:
@@ -823,10 +840,11 @@ def find_product(product_name):
 
     return None
 
-def parse_multiple_products_by_numbers(text):
+def parse_multiple_products_by_numbers(text, inventory=None):
     """Parse multiple products using number positions as delimiters.
     Examples: '2 lays 3 parle g' or 'lays 2 parle g 3'
     Returns list of (quantity, product_key, unit) tuples."""
+    inventory = inventory if inventory is not None else get_all_products_db()
     print(f"[DEBUG] parse_multiple_products_by_numbers input: '{text}'")
     
     # Find all numbers (digits) and their positions in the text
@@ -989,7 +1007,7 @@ def parse_multiple_products_by_numbers(text):
                 break
         
         if product_text:
-            product_key = find_product(product_text)
+            product_key = find_product(product_text, inventory=inventory)
             if product_key:
                 # Check if this product has already been used
                 if product_key in used_products:
@@ -1008,7 +1026,7 @@ def parse_multiple_products_by_numbers(text):
     
     return results if len(results) >= 2 else None
 
-def parse_multiple_products_by_conjunctions(text):
+def parse_multiple_products_by_conjunctions(text, inventory=None):
     """Parse multiple products by splitting on conjunctions (FALLBACK METHOD).
     Examples: '2 lays और 3 parle g'
     Returns list of (quantity, product_key, unit) tuples."""
@@ -1027,14 +1045,14 @@ def parse_multiple_products_by_conjunctions(text):
         if not segment:
             continue
         
-        qty, prod, unit = parse_quantity_and_unit(segment)
+        qty, prod, unit = parse_quantity_and_unit(segment, inventory=inventory)
         if qty and prod:
             results.append((qty, prod, unit))
             print(f"[DEBUG] Parsed segment '{segment}' -> qty={qty}, product={prod}, unit={unit}")
     
     return results if results else None
 
-def parse_multiple_products(text):
+def parse_multiple_products(text, inventory=None):
     """Parse multiple products from text using multiple strategies.
     Primary: Number-based detection ('2 lays 3 parle g')
     Fallback: Conjunction-based splitting ('2 lays और 3 parle g')
@@ -1045,7 +1063,7 @@ def parse_multiple_products(text):
     
     # Strategy 1: Number-based detection (PRIMARY)
     print(f"[DEBUG] Trying Strategy 1: Number-based detection...")
-    results = parse_multiple_products_by_numbers(text)
+    results = parse_multiple_products_by_numbers(text, inventory=inventory)
     if results and len(results) >= 2:
         print(f"[DEBUG] ✅ Number-based parsing succeeded with {len(results)} products")
         print(f"[DEBUG] Results: {results}")
@@ -1055,7 +1073,7 @@ def parse_multiple_products(text):
     
     # Strategy 2: Conjunction-based splitting (FALLBACK)
     print(f"[DEBUG] Trying Strategy 2: Conjunction-based splitting...")
-    results = parse_multiple_products_by_conjunctions(text)
+    results = parse_multiple_products_by_conjunctions(text, inventory=inventory)
     if results and len(results) >= 2:
         print(f"[DEBUG] ✅ Conjunction-based parsing succeeded with {len(results)} products")
         print(f"[DEBUG] Results: {results}")
@@ -1067,7 +1085,7 @@ def parse_multiple_products(text):
     print(f"[DEBUG] ==========================================")
     return None
 
-def parse_quantity_and_unit(text):
+def parse_quantity_and_unit(text, inventory=None):
     """Parse quantity and unit from text, converting to base units."""
     print(f"[DEBUG] parse_quantity_and_unit input: '{text}'")
     # First, handle 'quantity + unit' only (no product specified)
@@ -1126,10 +1144,10 @@ def parse_quantity_and_unit(text):
                     print(f"[DEBUG] Second group is a unit ('{product_text}'); no product provided")
                     return quantity, None, product_text
             
-            product_key = find_product(product_text)
+            product_key = find_product(product_text, inventory=inventory)
             
             if product_key:
-                current_products = get_all_products_db()
+                current_products = inventory if inventory is not None else get_all_products_db()
                 if product_key not in current_products:
                     print(f"[DEBUG] product_key {product_key} not found in DB")
                     return quantity, product_key, unit
@@ -1458,14 +1476,15 @@ def process_multiple_products_command(original_text, products_list, apply=True):
 # Enhanced text processing with measurement unit support
 def process_text_command(text, apply=True):
     """Processes the transcribed text and performs inventory actions."""
+    inventory = get_all_products_db()
     text = preprocess_text(text)
     print(f"Processing command: '{text}'")
 
     # --- Billing Keywords Detection ---
     billing_keywords = ['bill banao', 'bill do', 'receipt do', 'bill bana do', 'invoice']
     if any(kw in text.lower() for kw in billing_keywords):
-        current_products = get_all_products_db()
-        items_parsed = parse_multiple_products(text)
+        current_products = inventory
+        items_parsed = parse_multiple_products(text, inventory=inventory)
         if items_parsed:
             bill_items_payload = []
             for qty, product_key, unit in items_parsed:
@@ -1484,18 +1503,18 @@ def process_text_command(text, apply=True):
             }
 
     # First, try to parse multiple products
-    multiple_products = parse_multiple_products(text)
+    multiple_products = parse_multiple_products(text, inventory=inventory)
     
     if multiple_products and len(multiple_products) > 1:
         # Handle multiple products
         return process_multiple_products_command(text, multiple_products, apply)
     
     # Fall back to single product parsing
-    quantity, product_key, unit = parse_quantity_and_unit(text)
+    quantity, product_key, unit = parse_quantity_and_unit(text, inventory=inventory)
     
     print(f"Detected - Quantity: {quantity}, Product: {product_key}, Unit: {unit}")
     
-    current_products = get_all_products_db()
+    current_products = inventory
     
     # If we have both quantity and product, determine action
     if quantity and product_key:
@@ -1793,18 +1812,7 @@ def test_audio():
         print(f"Error in test_audio: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-def save_transaction_to_csv(transaction):
-    """Save a completed transaction to CSV file"""
-    file_exists = os.path.exists(TRANSACTIONS_CSV)
-    
-    with open(TRANSACTIONS_CSV, 'a', newline='', encoding='utf-8') as f:
-        fieldnames = ['timestamp', 'action', 'product', 'quantity', 'unit', 'old_stock', 'new_stock', 'price', 'total_amount']
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-        
-        if not file_exists:
-            writer.writeheader()
-        
-        writer.writerow(transaction)
+
 
 def load_transactions_from_db(limit=None):
     """Load transaction history from DB"""
@@ -1886,11 +1894,7 @@ def get_bulk_restock_history():
         'total_count': len(history)
     })
 
-@app.route('/history', methods=['GET'])
-def history():
-    """Get all transaction history for the history view"""
-    transactions = load_transactions_from_csv()
-    return jsonify(transactions[::-1])  # Return as list, most recent first
+
 
 @app.route('/pending_confirmations', methods=['GET'])
 @login_required
@@ -2009,6 +2013,17 @@ def update_price():
 
     if not product_name or new_price is None:
         return jsonify({'error': 'Missing product or price'}), 400
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE products SET price = %s WHERE name = %s", (float(new_price), product_name))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/update_stock', methods=['POST'])
 @login_required
@@ -2643,7 +2658,22 @@ def set_client_status():
 @login_required
 def get_dashboard_stats():
     """Returns aggregated stats: Revenue, Low Stock, Pending, Client Status, and Revenue History."""
+    shop_id = session.get('user_id')
+    now = time.time()
     
+    # Check cache first
+    if shop_id in _dashboard_stats_cache:
+        cached = _dashboard_stats_cache[shop_id]
+        if now - cached['timestamp'] < _stats_cache_duration:
+            # Update dynamic values that don't need DB
+            data = cached['data'].copy()
+            try:
+                data['pending_count'] = len(pending_confirmations)
+            except:
+                data['pending_count'] = 0
+            data['voice_active'] = android_client_connected if 'android_client_connected' in globals() else False
+            return jsonify(data)
+
     today_str = date.today().isoformat() # YYYY-MM-DD
     
     current_products = get_all_products_db()
@@ -2682,14 +2712,22 @@ def get_dashboard_stats():
     except:
         pending_count = 0
     
-    return jsonify({
+    stats_data = {
         "success": True,
         "today_revenue": round(float(today_revenue), 2),
         "revenue_history": revenue_by_date,
         "low_stock_count": low_stock_count,
         "pending_count": pending_count,
         "voice_active": android_client_connected if 'android_client_connected' in globals() else False
-    })
+    }
+    
+    # Store in cache
+    _dashboard_stats_cache[shop_id] = {
+        "timestamp": now,
+        "data": stats_data
+    }
+    
+    return jsonify(stats_data)
 
 # --- New Features Routes ---
 
@@ -2961,7 +2999,7 @@ def load_chat_messages(conversation_id: int, limit: int = 50, offset: int = 0) -
     cur.execute(
         """SELECT m.id, m.sender_id, m.encrypted_body, m.iv, m.auth_tag,
                   m.message_type, m.is_read, m.created_at, s.username, s.shop_name,
-                  o.id AS order_id
+                  o.id AS order_id, o.status AS order_status
            FROM messages m
            JOIN shops s ON s.id = m.sender_id
            LEFT JOIN orders o ON o.message_id = m.id
@@ -2988,7 +3026,8 @@ def load_chat_messages(conversation_id: int, limit: int = 50, offset: int = 0) -
             "created_at":   str(r[7]),
             "username":     r[8],
             "display_name": r[9] or r[8],
-            "order_id":     r[10]
+            "order_id":     r[10],
+            "order_status": r[11]
         })
     return list(reversed(messages))   # Chronological order
 
@@ -3520,10 +3559,9 @@ def api_order_confirm_receipt():
         else:
             return jsonify({"error": "No dispatched orders found to confirm"}), 400
 
+    shopuserid = session.get('user_id')
     if session.get('role') not in ('shop', 'shopkeeper'):
         return jsonify({"error": "Forbidden"}), 403
-
-    shopuserid = session.get('user_id')
     
     conn = get_db_connection()
     cur  = conn.cursor()
@@ -3542,38 +3580,45 @@ def api_order_confirm_receipt():
     
     if order_data:
         prod_name, req_qty, conf_qty, items_json = order_data
-        # If wholesaler didn't specify, use requested qty
         final_qty = conf_qty if conf_qty is not None else req_qty
         
+        # Pre-fetch inventory for mapping
+        inventory_cache = get_all_products_db()
+        print(f"[DEBUG] Processing restock for {prod_name}. Items: {items_json}")
+
         if prod_name == "Bulk Order" and items_json:
             try:
-                # items_json might be a string (from DB) or list/dict
                 items_data = items_json
                 if isinstance(items_data, str):
                     items_data = json.loads(items_data)
-                
+
                 if isinstance(items_data, dict):
-                    # New format: {product_name: quantity}
                     for item_p_name, item_p_qty in items_data.items():
+                        db_p_name = find_product(item_p_name, inventory=inventory_cache) or item_p_name
+                        qty_to_add = float(item_p_qty)
+                        print(f"[DEBUG] Bulk Update: {item_p_name} -> {db_p_name} (+{qty_to_add})")
                         cur.execute(
                             "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
-                            (float(item_p_qty), item_p_name)
+                            (qty_to_add, db_p_name)
                         )
                 else:
-                    # For bulk orders (list), we distribute the confirmed quantity among the items
                     multiplier = final_qty / req_qty if req_qty > 0 else 1
                     for item_name in items_data:
+                        db_p_name = find_product(item_name, inventory=inventory_cache) or item_name
+                        qty_to_add = multiplier
+                        print(f"[DEBUG] Bulk List Update: {item_name} -> {db_p_name} (+{qty_to_add})")
                         cur.execute(
                             "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
-                            (multiplier, item_name)
+                            (qty_to_add, db_p_name)
                         )
             except Exception as e:
                 print(f"Restock error: {e}")
         else:
-            # For single product orders, update the specific product
+            db_p_name = find_product(prod_name, inventory=inventory_cache) or prod_name
+            print(f"[DEBUG] Single Update: {prod_name} -> {db_p_name} (+{final_qty})")
             cur.execute(
                 "UPDATE products SET current_stock = current_stock + %s WHERE name = %s",
-                (final_qty, prod_name)
+                (final_qty, db_p_name)
             )
     
     conn.commit()

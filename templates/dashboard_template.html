@@ -293,10 +293,10 @@
 <div id="view-wholesaler-orders" class="view-section">
     <div class="flex justify-between items-center mb-4">
         <h2>My Wholesaler Orders</h2>
-        <div class="flex gap-2">
-            <button class="btn" onclick="loadWholesalerOrders('pending')">Pending</button>
-            <button class="btn" onclick="loadWholesalerOrders('dispatched')">Dispatched</button>
-            <button class="btn" onclick="loadWholesalerOrders('')">All</button>
+        <div class="flex gap-2 order-filters-shop">
+            <button class="btn order-filter-btn" onclick="loadWholesalerOrders('pending')">Pending</button>
+            <button class="btn order-filter-btn" onclick="loadWholesalerOrders('dispatched')">Dispatched</button>
+            <button class="btn order-filter-btn" onclick="loadWholesalerOrders('')">All</button>
         </div>
     </div>
     <div id="wholesaler-orders-list">
@@ -616,10 +616,10 @@
                             if (lowStockHtml === '') {
                                 grid.innerHTML = `
                                 <div class="empty-state text-center" style="grid-column: 1 / -1; padding: var(--space-8);">
-                                    <div class="flex justify-center mb-3">
-                                        <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--success); opacity: 0.8;"></i>
+                                    <div class="flex items-center gap-3 mb-1" style="justify-content: center;">
+                                        <i data-lucide="check-circle" style="width: 32px; height: 32px; color: var(--success); opacity: 0.8;"></i>
+                                        <h2 style="font-size: 18px; font-weight: 600; margin: 0;">Inventory is healthy!</h2>
                                     </div>
-                                    <h2 style="font-size: 18px; font-weight: 600;">Inventory is healthy!</h2>
                                     <p class="text-secondary mt-1">No items are currently below the critical threshold.</p>
                                 </div>`;
                             } else {
@@ -643,20 +643,37 @@
                 document.getElementById('inventory-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center; color:red; padding: 2rem;">Error loading data.</td></tr>';
             }
         }
-        
-        async function loadWholesalerOrders(status = '') {
+        let cachedWholesalerOrders = null;
+        let currentShopOrderFilter = '';
+
+        async function loadWholesalerOrders(status = '', forceRefresh = false) {
+            currentShopOrderFilter = status;
+            
+            // Update active styling
+            document.querySelectorAll('.order-filter-btn').forEach(btn => {
+                const btnStatus = btn.textContent.toLowerCase() === 'all' ? '' : btn.textContent.toLowerCase();
+                btn.style.opacity = btnStatus === status ? '1' : '0.6';
+            });
+
             const list = document.getElementById('wholesaler-orders-list');
             try {
-                const url = status ? `/api/shop/orders?status=${status}` : '/api/shop/orders';
-                const res = await fetch(url);
-                const data = await res.json();
+                if (!cachedWholesalerOrders || forceRefresh) {
+                    const res = await fetch('/api/shop/orders');
+                    const data = await res.json();
+                    cachedWholesalerOrders = data.orders || [];
+                }
                 
-                if (!data.orders || data.orders.length === 0) {
+                let ordersToRender = cachedWholesalerOrders;
+                if (status) {
+                    ordersToRender = cachedWholesalerOrders.filter(o => o.status === status);
+                }
+
+                if (!ordersToRender || ordersToRender.length === 0) {
                     list.innerHTML = `<div style="text-align:center; padding:3rem; color:#94a3b8;">No orders found.</div>`;
                     return;
                 }
 
-                list.innerHTML = data.orders.map(o => {
+                list.innerHTML = ordersToRender.map(o => {
                     let itemsHtml = '';
                     if (o.product_name === 'Bulk Order' && o.items_json) {
                         try {
@@ -781,8 +798,8 @@
             if (salesChartInstance) salesChartInstance.destroy();
 
             const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(79, 70, 229, 0.4)');
-            gradient.addColorStop(1, 'rgba(79, 70, 229, 0.0)');
+            gradient.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
 
             salesChartInstance = new Chart(ctx, {
                 type: 'line',
@@ -791,7 +808,7 @@
                     datasets: [{
                         label: 'Revenue (₹)',
                         data: data.length ? data : [0, 0, 0, 0, 0, 0, 0],
-                        borderColor: '#4f46e5',
+                        borderColor: '#000000',
                         backgroundColor: gradient,
                         fill: true,
                         tension: 0.4
@@ -1058,12 +1075,19 @@
             
             let extraHtml = '';
             if (msg.message_type === 'order_dispatch' && !isMine) {
-                extraHtml = `
-                    <div style="margin-top:10px;">
-                        <button onclick="confirmReceipt(this, ${msg.order_id || 'null'})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:8px; font-weight:700; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                           <i data-lucide="truck" style="width: 18px; height: 18px;"></i> Confirm Receipt
-                        </button>
-                    </div>`;
+                if (msg.order_status === 'dispatched') {
+                    extraHtml = `
+                        <div style="margin-top:10px;">
+                            <button onclick="confirmReceipt(this, ${msg.order_id || 'null'})" class="btn" style="background:#10b981; color:white; width:100%; border-radius:12px; padding:8px; font-weight:700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                               <i data-lucide="truck" style="width: 18px; height: 18px;"></i> Confirm Receipt
+                            </button>
+                        </div>`;
+                } else if (msg.order_status === 'confirmed') {
+                    extraHtml = `
+                        <div style="margin-top:10px; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid #10b981; border-radius: 12px; padding: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <i data-lucide="check-check" style="width: 16px; height: 16px;"></i> Received & Confirmed
+                        </div>`;
+                }
             }
 
             const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
@@ -1109,6 +1133,7 @@
                     btn.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; gap:8px;"><i data-lucide="check-check" style="width:16px; height:16px;"></i> Received & Confirmed</div>';
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                     btn.onclick = null;
+                    loadWholesalerOrders(currentShopOrderFilter, true);
                     if (typeof loadData === 'function') loadData();
                 } else {
                     alert(data.error || 'Failed to confirm receipt');
@@ -1289,11 +1314,6 @@
             const discount = parseFloat(document.getElementById('discount').value) || 0;
             const subtotal = items.reduce((s, i) => s + i.line_total, 0);
             const total = Math.round((subtotal - discount) * 100) / 100;
-
-            // Update totals
-            document.getElementById('t-subtotal').textContent = `₹${subtotal.toFixed(2)}`;
-            document.getElementById('t-discount').textContent = `-₹${discount.toFixed(2)}`;
-            document.getElementById('t-total').textContent = `₹${total.toFixed(2)}`;
 
             // Update preview
             document.getElementById('pv-sub').textContent = `₹${subtotal.toFixed(2)}`;

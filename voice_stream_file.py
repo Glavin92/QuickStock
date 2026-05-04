@@ -164,7 +164,7 @@ _last_partial_en = ""
 _english_word_buffer = set()
 
 
-def _post_json_with_retry(url, payload, timeout_seconds=10, retries=1, backoff_seconds=0.5):
+def _post_json_with_retry(url, payload, timeout_seconds=30, retries=1, backoff_seconds=0.5):
     """POST JSON with a small retry/backoff.
 
     This keeps voice streaming responsive when the Flask app/DB is briefly slow.
@@ -330,7 +330,7 @@ def process_pcm_streaming(pcm):
                 resp = _post_json_with_retry(
                     url,
                     {"text": final_hi},
-                    timeout_seconds=float(os.environ.get("APP_PROCESS_TIMEOUT", "10")),
+                    timeout_seconds=float(os.environ.get("APP_PROCESS_TIMEOUT", "30")),
                     retries=int(os.environ.get("APP_PROCESS_RETRIES", "1")),
                     backoff_seconds=float(os.environ.get("APP_PROCESS_BACKOFF", "0.5")),
                 )

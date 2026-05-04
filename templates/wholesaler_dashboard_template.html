@@ -42,66 +42,355 @@
 
 {% block content %}
 <style>
-    .view-section { display: none; }
-    .view-section.active { display: block; }
-    
+    .view-section {
+        display: none;
+    }
+
+    .view-section.active {
+        display: block;
+    }
+
     /* Stats Bar */
-    .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
-    .stat-card { padding: var(--space-4); border-radius: var(--radius-md); background: var(--bg-secondary); border: 1px solid var(--border); }
-    .stat-value { font-size: 24px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-    .stat-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+    }
+
+    .stat-card {
+        padding: var(--space-4);
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .stat-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
 
     /* Orders Tab */
-    .order-filters { display: flex; gap: 8px; margin-bottom: var(--space-4); }
-    .filter-btn { padding: 6px 16px; border-radius: 99px; border: 1px solid var(--border); background: var(--bg-primary); font-size: 13px; cursor: pointer; font-weight: 500; color: var(--text-secondary); transition: all 0.2s; }
-    .filter-btn.active { background: var(--text-primary); color: var(--bg-primary); border-color: var(--text-primary); }
-    
-    .orders-list { display: flex; flex-direction: column; gap: var(--space-4); }
-    .order-card { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); }
-    .order-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-3); }
-    .order-shop { font-weight: 600; font-size: 16px; color: var(--text-primary); }
-    .order-time { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
-    
-    .order-product { font-size: 15px; margin-bottom: var(--space-3); color: var(--text-primary); font-weight: 500; }
-    .order-note { background: var(--bg-secondary); padding: var(--space-3); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-3); border: 1px solid var(--border); }
-    .order-actions { display: flex; gap: 8px; align-items: center; }
-    .order-actions input { padding: 0 12px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none; font-size: 13px; background: var(--bg-input); }
-    
+    .order-filters {
+        display: flex;
+        gap: 8px;
+        margin-bottom: var(--space-4);
+    }
+
+    .filter-btn {
+        padding: 6px 16px;
+        border-radius: 99px;
+        border: 1px solid var(--border);
+        background: var(--bg-primary);
+        font-size: 13px;
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+        background: var(--text-primary);
+        color: var(--bg-primary);
+        border-color: var(--text-primary);
+    }
+
+    .orders-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .order-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-5);
+    }
+
+    .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--space-3);
+    }
+
+    .order-shop {
+        font-weight: 600;
+        font-size: 16px;
+        color: var(--text-primary);
+    }
+
+    .order-time {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+
+    .order-product {
+        font-size: 15px;
+        margin-bottom: var(--space-3);
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .order-note {
+        background: var(--bg-secondary);
+        padding: var(--space-3);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: var(--space-3);
+        border: 1px solid var(--border);
+    }
+
+    .order-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .order-actions input {
+        padding: 0 12px;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        outline: none;
+        font-size: 13px;
+        background: var(--bg-input);
+    }
+
     /* Shops Tab */
-    .shops-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
-    .shop-card { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); text-align: center; }
-    .shop-avatar { width: 56px; height: 56px; background: var(--accent-muted); color: var(--accent); border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-weight: 600; margin: 0 auto var(--space-3); }
-    .shop-name { font-weight: 600; font-size: 16px; margin-bottom: 4px; color: var(--text-primary); }
-    .shop-address { color: var(--text-secondary); font-size: 13px; margin-bottom: var(--space-4); }
-    .shop-stats { display: flex; justify-content: space-around; border-top: 1px solid var(--border); padding-top: var(--space-4); }
-    .shop-stat-item { text-align: center; }
-    .shop-stat-value { font-weight: 600; font-size: 15px; color: var(--text-primary); }
-    .shop-stat-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; margin-top: 2px; }
+    .shops-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--space-4);
+    }
+
+    .shop-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-5);
+        text-align: center;
+    }
+
+    .shop-avatar {
+        width: 56px;
+        height: 56px;
+        background: var(--accent-muted);
+        color: var(--accent);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 auto var(--space-3);
+    }
+
+    .shop-name {
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 4px;
+        color: var(--text-primary);
+    }
+
+    .shop-address {
+        color: var(--text-secondary);
+        font-size: 13px;
+        margin-bottom: var(--space-4);
+    }
+
+    .shop-stats {
+        display: flex;
+        justify-content: space-around;
+        border-top: 1px solid var(--border);
+        padding-top: var(--space-4);
+    }
+
+    .shop-stat-item {
+        text-align: center;
+    }
+
+    .shop-stat-value {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--text-primary);
+    }
+
+    .shop-stat-label {
+        font-size: 11px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        margin-top: 2px;
+    }
 
     /* Analytics Tab */
-    .chart-container { background: var(--bg-primary); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); margin-bottom: var(--space-4); }
-    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-    
+    .chart-container {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-5);
+        margin-bottom: var(--space-4);
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
     /* Chat layout */
-    .chat-layout { display: flex; height: calc(100vh - 120px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-primary); overflow: hidden; }
-    .chat-sidebar { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-secondary); }
-    .chat-sidebar-header { padding: var(--space-4); border-bottom: 1px solid var(--border); font-weight: 600; }
-    .conv-item { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer; position: relative; }
-    .conv-item:hover { background: var(--bg-hover); }
-    .conv-item.active { background: var(--accent-muted); }
-    .conv-name { font-weight: 500; font-size: 13px; }
-    .conv-preview { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-    .conv-unread { position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%); background: var(--danger); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 99px; }
-    .chat-main { flex: 1; display: flex; flex-direction: column; }
-    .chat-header { padding: var(--space-4); border-bottom: 1px solid var(--border); font-weight: 500; font-size: 14px; background: var(--bg-primary); }
-    .chat-messages { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
-    .msg-bubble { max-width: 70%; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; line-height: 1.5; }
-    .msg-bubble.mine { background: var(--accent); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
-    .msg-bubble.theirs { background: var(--bg-hover); color: var(--text-primary); align-self: flex-start; border-bottom-left-radius: 2px; }
-    .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
-    .chat-input-area { padding: var(--space-4); border-top: 1px solid var(--border); display: flex; gap: var(--space-2); background: var(--bg-primary); }
-    .btn-send { background: var(--accent); color: white; border: none; width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .btn-send i { width: 16px; height: 16px; }
+    .chat-layout {
+        display: flex;
+        height: calc(100vh - 120px);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+        overflow: hidden;
+    }
+
+    .chat-sidebar {
+        width: 280px;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-secondary);
+    }
+
+    .chat-sidebar-header {
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+    }
+
+    .conv-item {
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        position: relative;
+    }
+
+    .conv-item:hover {
+        background: var(--bg-hover);
+    }
+
+    .conv-item.active {
+        background: var(--accent-muted);
+    }
+
+    .conv-name {
+        font-weight: 500;
+        font-size: 13px;
+    }
+
+    .conv-preview {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+    }
+
+    .conv-unread {
+        position: absolute;
+        right: var(--space-4);
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--danger);
+        color: white;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 99px;
+    }
+
+    .chat-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chat-header {
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border);
+        font-weight: 500;
+        font-size: 14px;
+        background: var(--bg-primary);
+    }
+
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .msg-bubble {
+        max-width: 70%;
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .msg-bubble.mine {
+        background: var(--accent);
+        color: white;
+        align-self: flex-end;
+        border-bottom-right-radius: 2px;
+    }
+
+    .msg-bubble.theirs {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        align-self: flex-start;
+        border-bottom-left-radius: 2px;
+    }
+
+    .msg-time {
+        font-size: 10px;
+        opacity: 0.7;
+        margin-top: 4px;
+        text-align: right;
+    }
+
+    .chat-input-area {
+        padding: var(--space-4);
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: var(--space-2);
+        background: var(--bg-primary);
+    }
+
+    .btn-send {
+        background: var(--accent);
+        color: white;
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .btn-send i {
+        width: 16px;
+        height: 16px;
+    }
 </style>
 
 <!-- Top Stats Bar -->
@@ -112,7 +401,7 @@
     </div>
     <div class="stat-card">
         <div class="stat-value" id="stat-confirmed">0</div>
-        <div class="stat-label">Confirmed (To Ship)</div>
+        <div class="stat-label">Confirmed</div>
     </div>
     <div class="stat-card">
         <div class="stat-value" id="stat-dispatched">0</div>
@@ -162,12 +451,12 @@
     <div class="flex justify-between items-center mb-4">
         <h2 class="m-0">Order Management</h2>
     </div>
-    
+
     <div class="order-filters">
-        <button class="filter-btn active" onclick="loadOrders('pending', this)">Pending</button>
-        <button class="filter-btn" onclick="loadOrders('confirmed', this)">Confirmed</button>
-        <button class="filter-btn" onclick="loadOrders('dispatched', this)">Dispatched</button>
-        <button class="filter-btn" onclick="loadOrders('rejected', this)">Rejected</button>
+        <button class="filter-btn active" onclick="loadOrders('pending')">Pending</button>
+        <button class="filter-btn" onclick="loadOrders('confirmed')">Confirmed</button>
+        <button class="filter-btn" onclick="loadOrders('dispatched')">Dispatched</button>
+        <button class="filter-btn" onclick="loadOrders('rejected')">Rejected</button>
     </div>
 
     <div class="orders-list" id="full-orders-list">
@@ -189,7 +478,7 @@
 <!-- ANALYTICS VIEW -->
 <div id="view-analytics" class="view-section">
     <h2 class="mb-4">Wholesaler Analytics</h2>
-    
+
     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); margin-bottom: var(--space-4);">
         <div class="card" style="padding: var(--space-4);">
             <div style="margin-bottom: 16px;">
@@ -199,7 +488,7 @@
                 <canvas id="trend-chart"></canvas>
             </div>
         </div>
-        
+
         <div class="card" style="padding: var(--space-4);">
             <div style="margin-bottom: 16px;">
                 <h3 style="font-size: 16px; font-weight: 600;">Top Products (by Orders)</h3>
@@ -225,7 +514,9 @@
                     </tr>
                 </thead>
                 <tbody id="top-shops-body">
-                    <tr><td colspan="4" class="text-center text-secondary py-4">Loading data...</td></tr>
+                    <tr>
+                        <td colspan="4" class="text-center text-secondary py-4">Loading data...</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -241,7 +532,8 @@
         </div>
 
         <div class="chat-main" id="chat-main">
-            <div id="chat-placeholder" class="text-secondary" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div id="chat-placeholder" class="text-secondary"
+                style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                 <i data-lucide="message-square" style="width:48px;height:48px;opacity:0.3;margin-bottom:12px;"></i>
                 <span>Select a shop to start chatting</span>
             </div>
@@ -250,7 +542,8 @@
                 <div class="chat-header" id="chat-partner-name"></div>
                 <div class="chat-messages" id="chat-messages"></div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" class="input-field" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendChatMessage()" style="flex:1;">
+                    <input type="text" id="chat-input" class="input-field" placeholder="Type a message..."
+                        onkeydown="if(event.key==='Enter') sendChatMessage()" style="flex:1;">
                     <button onclick="sendChatMessage()" class="btn-send">
                         <i data-lucide="send"></i>
                     </button>
@@ -261,134 +554,136 @@
 </div>
 
 <!-- Toast notification -->
-<div id="toast" style="position: fixed; bottom: 20px; right: 20px; background: var(--text-primary); color: var(--bg-primary); padding: 12px 20px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 9999; pointer-events: none;"></div>
+<div id="toast"
+    style="position: fixed; bottom: 20px; right: 20px; background: var(--text-primary); color: var(--bg-primary); padding: 12px 20px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(20px); transition: all 0.3s; z-index: 9999; pointer-events: none;">
+</div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-        // Global State
-        let currentTab = 'orders';
-        let currentOrderFilter = 'pending';
-        let chatSocket = null;
-        let activeConvId = null;
-        let chatJwt = null;
-        let currentUserId = null;
-        let productChart = null;
-        let trendsChart = null;
+    // Global State
+    let currentTab = 'orders';
+    let currentOrderFilter = 'pending';
+    let chatSocket = null;
+    let activeConvId = null;
+    let chatJwt = null;
+    let currentUserId = null;
+    let productChart = null;
+    let trendsChart = null;
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3000);
-        }
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-        }
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
 
-        // --- Navigation ---
-        function switchView(tabName) {
-            document.querySelectorAll('.sidebar-nav .nav-link').forEach(el => el.classList.remove('active'));
-            const navEl = document.getElementById('nav-' + tabName);
-            if (navEl) navEl.classList.add('active');
-            
-            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-            document.getElementById('view-' + tabName).classList.add('active');
+    // --- Navigation ---
+    function switchView(tabName) {
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach(el => el.classList.remove('active'));
+        const navEl = document.getElementById('nav-' + tabName);
+        if (navEl) navEl.classList.add('active');
 
-            const titles = {
-                'dashboard': 'Wholesaler Dashboard',
-                'orders': 'Order Management',
-                'shops': 'My Shops',
-                'analytics': 'Analytics',
-                'chat': 'Chat'
-            };
-            const pageTitle = document.querySelector('.page-title');
-            if (pageTitle) pageTitle.innerText = titles[tabName] || tabName;
-            
-            currentTab = tabName;
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.getElementById('view-' + tabName).classList.add('active');
 
-            if (tabName === 'orders') loadOrders(currentOrderFilter, true);
-            if (tabName === 'shops') loadShops();
-            if (tabName === 'analytics') loadAnalytics();
-            if (tabName === 'chat' && !chatSocket) initChat();
-        }
+        const titles = {
+            'dashboard': 'Wholesaler Dashboard',
+            'orders': 'Order Management',
+            'shops': 'My Shops',
+            'analytics': 'Analytics',
+            'chat': 'Chat'
+        };
+        const pageTitle = document.querySelector('.page-title');
+        if (pageTitle) pageTitle.innerText = titles[tabName] || tabName;
 
-        async function loadOrderSummaryCards() {
-            try {
-                const [analyticsRes, shopsRes] = await Promise.all([
-                    fetch('/api/wholesaler/analytics'),
-                    fetch('/api/wholesaler/shops')
-                ]);
-                const analytics = await analyticsRes.json();
-                const shops     = await shopsRes.json();
+        currentTab = tabName;
 
-                document.getElementById('stat-pending').textContent = analytics.summary.pending_orders;
-                document.getElementById('stat-confirmed').textContent = analytics.summary.confirmed || analytics.summary.total_orders || 0;
-                document.getElementById('stat-dispatched').textContent = analytics.summary.dispatched;
-                document.getElementById('stat-revenue').textContent = '₹' + (analytics.summary.revenue || 0);
-                document.getElementById('stat-shops').textContent = shops.shops?.length || 0;
-                
-                // Also populate recent-orders-list on dashboard
-                loadRecentOrders();
-            } catch (e) { console.error('Error loading summary cards', e); }
-        }
+        if (tabName === 'orders') loadOrders(currentOrderFilter, true);
+        if (tabName === 'shops') loadShops();
+        if (tabName === 'analytics') loadAnalytics();
+        if (tabName === 'chat' && !chatSocket) initChat();
+    }
 
-        // --- Orders Tab ---
-        let cachedOrders = null;
-        
-        async function loadOrders(status = 'pending', forceRefresh = false) {
-            currentOrderFilter = status;
-            
-            // Update filter buttons UI
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.textContent.toLowerCase() === status);
-            });
+    async function loadOrderSummaryCards() {
+        try {
+            const [analyticsRes, shopsRes] = await Promise.all([
+                fetch('/api/wholesaler/analytics'),
+                fetch('/api/wholesaler/shops')
+            ]);
+            const analytics = await analyticsRes.json();
+            const shops = await shopsRes.json();
 
-            try {
-                if (!cachedOrders || forceRefresh) {
-                    // Fetch all orders from backend without status filter
-                    const res  = await fetch('/api/wholesaler/orders');
-                    const data = await res.json();
-                    cachedOrders = data.orders || [];
-                    
-                    // Update pending badge
-                    const pendingCount = cachedOrders.filter(o => o.status === 'pending').length;
-                    const badge = document.getElementById('nav-badge-chat');
-                    if (badge && pendingCount > 0) {
-                        // We don't have a dedicated orders badge, skip
-                    }
+            document.getElementById('stat-pending').textContent = analytics.summary.pending_orders;
+            document.getElementById('stat-confirmed').textContent = analytics.summary.confirmed || analytics.summary.total_orders || 0;
+            document.getElementById('stat-dispatched').textContent = analytics.summary.dispatched;
+            document.getElementById('stat-revenue').textContent = '₹' + (analytics.summary.revenue || 0);
+            document.getElementById('stat-shops').textContent = shops.shops?.length || 0;
+
+            // Also populate recent-orders-list on dashboard
+            loadRecentOrders();
+        } catch (e) { console.error('Error loading summary cards', e); }
+    }
+
+    // --- Orders Tab ---
+    let cachedOrders = null;
+
+    async function loadOrders(status = 'pending', forceRefresh = false) {
+        currentOrderFilter = status;
+
+        // Update filter buttons UI
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.textContent.toLowerCase() === status);
+        });
+
+        try {
+            if (!cachedOrders || forceRefresh) {
+                // Fetch all orders from backend without status filter
+                const res = await fetch('/api/wholesaler/orders');
+                const data = await res.json();
+                cachedOrders = data.orders || [];
+
+                // Update pending badge
+                const pendingCount = cachedOrders.filter(o => o.status === 'pending').length;
+                const badge = document.getElementById('nav-badge-chat');
+                if (badge && pendingCount > 0) {
+                    // We don't have a dedicated orders badge, skip
                 }
-                
-                // Filter locally
-                const filteredOrders = cachedOrders.filter(o => o.status === status);
-                renderOrders(filteredOrders);
-                
-            } catch (e) { console.error('Failed to load orders', e); }
-        }
-
-        function renderOrders(orders) {
-            const container = document.getElementById('full-orders-list');
-            if (!container) return;
-            if (orders.length === 0) {
-                container.innerHTML = `<div class="empty-state">No ${currentOrderFilter} orders</div>`;
-                return;
             }
-            container.innerHTML = orders.map(o => {
-                let itemsHtml = '';
-                if (o.product_name === 'Bulk Order' && o.items_json) {
-                    try {
-                        const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : o.items_json;
-                        let chips = '';
-                        if (Array.isArray(items)) {
-                            chips = items.map(item => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${item}</span>`).join('');
-                        } else {
-                            // Object format {name: qty}
-                            chips = Object.entries(items).map(([name, qty]) => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${name}: <b>${qty}</b></span>`).join('');
-                        }
-                        itemsHtml = `
+
+            // Filter locally
+            const filteredOrders = cachedOrders.filter(o => o.status === status);
+            renderOrders(filteredOrders);
+
+        } catch (e) { console.error('Failed to load orders', e); }
+    }
+
+    function renderOrders(orders) {
+        const container = document.getElementById('full-orders-list');
+        if (!container) return;
+        if (orders.length === 0) {
+            container.innerHTML = `<div class="empty-state">No ${currentOrderFilter} orders</div>`;
+            return;
+        }
+        container.innerHTML = orders.map(o => {
+            let itemsHtml = '';
+            if (o.product_name === 'Bulk Order' && o.items_json) {
+                try {
+                    const items = typeof o.items_json === 'string' ? JSON.parse(o.items_json) : o.items_json;
+                    let chips = '';
+                    if (Array.isArray(items)) {
+                        chips = items.map(item => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${item}</span>`).join('');
+                    } else {
+                        // Object format {name: qty}
+                        chips = Object.entries(items).map(([name, qty]) => `<span style="background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; font-weight: 600;">${name}: <b>${qty}</b></span>`).join('');
+                    }
+                    itemsHtml = `
                             <div class="bulk-items-list" style="margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                                 <div style="font-size: 0.85rem; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase;">Items in this order:</div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 8px;">
@@ -401,10 +696,10 @@
                                 </button>` : ''}
                             </div>
                         `;
-                    } catch (e) { console.error('JSON parse error', e); }
-                }
+                } catch (e) { console.error('JSON parse error', e); }
+            }
 
-                return `
+            return `
                 <div class="order-card" id="order-${o.id}">
                     <div class="order-header">
                         <div>
@@ -428,76 +723,76 @@
                         <button onclick="orderAction(${o.id},'reject')" class="btn-action btn-reject" style="display: inline-flex; align-items: center; gap: 6px;"><i data-lucide="x" style="width: 16px; height: 16px;"></i> Reject</button>
                     </div>` : ''}
                 </div>`;
-            }).join('');
-            
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        }
+        }).join('');
 
-        async function editBulkOrder(orderId, itemsJson) {
-            const currentItems = JSON.parse(itemsJson);
-            const newItemsStr = prompt("Edit items (comma separated):", currentItems.join(", "));
-            if (newItemsStr === null) return;
-            
-            const newItems = newItemsStr.split(",").map(s => s.trim()).filter(s => s.length > 0);
-            
-            try {
-                const res = await fetch(`/api/wholesaler/orders/${orderId}/edit`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ items: newItems })
-                });
-                if (res.ok) {
-                    showToast("Order items updated!");
-                    loadOrders(currentOrderFilter, true);
-                }
-            } catch (e) { alert("Failed to edit order"); }
-        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
 
-        async function orderAction(orderId, action) {
-            const qtyInput = document.getElementById(`qty-${orderId}`);
-            const qty = qtyInput ? parseFloat(qtyInput.value) : null;
-            let note = '';
-            
-            if (action === 'reject') {
-                note = prompt('Reason for rejection (optional):') || '';
-            } else if (action === 'dispatch') {
-                note = prompt('Add a note for the shop (e.g. delivery time):') || '';
+    async function editBulkOrder(orderId, itemsJson) {
+        const currentItems = JSON.parse(itemsJson);
+        const newItemsStr = prompt("Edit items (comma separated):", currentItems.join(", "));
+        if (newItemsStr === null) return;
+
+        const newItems = newItemsStr.split(",").map(s => s.trim()).filter(s => s.length > 0);
+
+        try {
+            const res = await fetch(`/api/wholesaler/orders/${orderId}/edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: newItems })
+            });
+            if (res.ok) {
+                showToast("Order items updated!");
+                loadOrders(currentOrderFilter, true);
             }
+        } catch (e) { alert("Failed to edit order"); }
+    }
 
-            try {
-                const res = await fetch(`/api/wholesaler/orders/${orderId}/action`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, confirmed_qty: qty, note })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast(`Order ${action}ed successfully!`);
-                    loadOrders(currentOrderFilter, true); // force refresh after action
-                    loadOrderSummaryCards();
-                } else {
-                    alert(data.error || 'Action failed');
-                }
-            } catch (e) { alert('Request failed'); }
+    async function orderAction(orderId, action) {
+        const qtyInput = document.getElementById(`qty-${orderId}`);
+        const qty = qtyInput ? parseFloat(qtyInput.value) : null;
+        let note = '';
+
+        if (action === 'reject') {
+            note = prompt('Reason for rejection (optional):') || '';
+        } else if (action === 'dispatch') {
+            note = prompt('Add a note for the shop (e.g. delivery time):') || '';
         }
 
-        function quickCreateOrder(convId, productName, qty) {
-            switchView('orders');
-            // In a real app we might pre-fill a draft order form, but here we just prompt
-            alert(`Drafting order for ${productName} (Qty: ${qty}). This will appear in Pending once confirmed by shop.`);
-        }
+        try {
+            const res = await fetch(`/api/wholesaler/orders/${orderId}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, confirmed_qty: qty, note })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(`Order ${action}ed successfully!`);
+                loadOrders(currentOrderFilter, true); // force refresh after action
+                loadOrderSummaryCards();
+            } else {
+                alert(data.error || 'Action failed');
+            }
+        } catch (e) { alert('Request failed'); }
+    }
 
-        // --- Shops Tab ---
-        async function loadShops() {
-            try {
-                const res  = await fetch('/api/wholesaler/shops');
-                const data = await res.json();
-                const grid = document.getElementById('shops-grid');
-                if (!data.shops || data.shops.length === 0) {
-                    grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No linked shops yet. Click "+ Link New Shop"</div>`;
-                    return;
-                }
-                grid.innerHTML = data.shops.map(s => `
+    function quickCreateOrder(convId, productName, qty) {
+        switchView('orders');
+        // In a real app we might pre-fill a draft order form, but here we just prompt
+        alert(`Drafting order for ${productName} (Qty: ${qty}). This will appear in Pending once confirmed by shop.`);
+    }
+
+    // --- Shops Tab ---
+    async function loadShops() {
+        try {
+            const res = await fetch('/api/wholesaler/shops');
+            const data = await res.json();
+            const grid = document.getElementById('shops-grid');
+            if (!data.shops || data.shops.length === 0) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No linked shops yet. Click "+ Link New Shop"</div>`;
+                return;
+            }
+            grid.innerHTML = data.shops.map(s => `
                     <div class="shop-card">
                         <div class="shop-avatar">${(s.display_name || '?')[0].toUpperCase()}</div>
                         <div class="shop-name">${escapeHtml(s.display_name)}</div>
@@ -511,107 +806,107 @@
                         </div>
                     </div>
                 `).join('');
-            } catch (e) { console.error('Failed to load shops', e); }
-        }
+        } catch (e) { console.error('Failed to load shops', e); }
+    }
 
-        async function openChatWithShop(shopId, shopName) {
-            switchView('chat');
+    async function openChatWithShop(shopId, shopName) {
+        switchView('chat');
+        try {
+            const res = await fetch('/api/conversations/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ other_user_id: shopId }),
+            });
+            const data = await res.json();
+            if (data.conversation_id) {
+                await loadConversations();
+                openConversation(data.conversation_id, shopName);
+            }
+        } catch (e) { console.error('Failed to open chat', e); }
+    }
+
+    async function linkNewShop() {
+        const username = prompt("Enter the shopkeeper's username to link:");
+        if (!username) return;
+        try {
+            const res = await fetch('/api/wholesaler/shops/link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shop_username: username.trim() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('Shop linked successfully!');
+                loadShops();
+                loadOrderSummaryCards();
+            } else {
+                alert(data.error || 'Failed to link shop');
+            }
+        } catch (e) { alert('Request failed'); }
+    }
+
+    function openChatWithShop(shopUserId) {
+        switchTab('chat');
+        setTimeout(async () => {
             try {
                 const res = await fetch('/api/conversations/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ other_user_id: shopId }),
+                    body: JSON.stringify({ other_user_id: shopUserId })
                 });
                 const data = await res.json();
                 if (data.conversation_id) {
-                    await loadConversations();
-                    openConversation(data.conversation_id, shopName);
+                    loadConversations();
+                    openConversation(data.conversation_id, `Shop #${shopUserId}`);
                 }
-            } catch (e) { console.error('Failed to open chat', e); }
-        }
+            } catch (e) { console.error(e); }
+        }, 300);
+    }
 
-        async function linkNewShop() {
-            const username = prompt("Enter the shopkeeper's username to link:");
-            if (!username) return;
-            try {
-                const res = await fetch('/api/wholesaler/shops/link', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ shop_username: username.trim() })
-                });
-                const data = await res.json();
-                if (data.success) { 
-                    showToast('Shop linked successfully!'); 
-                    loadShops();
-                    loadOrderSummaryCards();
-                } else {
-                    alert(data.error || 'Failed to link shop');
-                }
-            } catch (e) { alert('Request failed'); }
-        }
+    // --- Analytics Tab ---
+    async function loadAnalytics() {
+        try {
+            const res = await fetch('/api/wholesaler/analytics');
+            const data = await res.json();
 
-        function openChatWithShop(shopUserId) {
-            switchTab('chat');
-            setTimeout(async () => {
-                try {
-                    const res  = await fetch('/api/conversations/start', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ other_user_id: shopUserId })
-                    });
-                    const data = await res.json();
-                    if (data.conversation_id) {
-                        loadConversations();
-                        openConversation(data.conversation_id, `Shop #${shopUserId}`);
-                    }
-                } catch (e) { console.error(e); }
-            }, 300);
-        }
+            // Product Chart
+            const prodCtx = document.getElementById('product-chart').getContext('2d');
+            if (productChart) productChart.destroy();
+            productChart = new Chart(prodCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.top_products.map(p => p.product),
+                    datasets: [{
+                        label: 'Orders',
+                        data: data.top_products.map(p => p.order_count),
+                        backgroundColor: '#4f46e5',
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
 
-        // --- Analytics Tab ---
-        async function loadAnalytics() {
-            try {
-                const res  = await fetch('/api/wholesaler/analytics');
-                const data = await res.json();
+            // Trend Chart
+            const trendCtx = document.getElementById('trend-chart').getContext('2d');
+            if (trendsChart) trendsChart.destroy();
+            trendsChart = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: data.daily_orders.map(d => d.day.substring(5)),
+                    datasets: [{
+                        label: 'Orders',
+                        data: data.daily_orders.map(d => d.count),
+                        borderColor: '#10b981',
+                        tension: 0.3, fill: true,
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
 
-                // Product Chart
-                const prodCtx = document.getElementById('product-chart').getContext('2d');
-                if (productChart) productChart.destroy();
-                productChart = new Chart(prodCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: data.top_products.map(p => p.product),
-                        datasets: [{
-                            label: 'Orders',
-                            data: data.top_products.map(p => p.order_count),
-                            backgroundColor: '#4f46e5',
-                            borderRadius: 6
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-                });
-
-                // Trend Chart
-                const trendCtx = document.getElementById('trend-chart').getContext('2d');
-                if (trendsChart) trendsChart.destroy();
-                trendsChart = new Chart(trendCtx, {
-                    type: 'line',
-                    data: {
-                        labels: data.daily_orders.map(d => d.day.substring(5)),
-                        datasets: [{
-                            label: 'Orders',
-                            data: data.daily_orders.map(d => d.count),
-                            borderColor: '#10b981',
-                            tension: 0.3, fill: true,
-                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-                });
-
-                // Top Shops Table
-                const tbody = document.getElementById('top-shops-body');
-                tbody.innerHTML = data.top_shops.map((s, i) => `
+            // Top Shops Table
+            const tbody = document.getElementById('top-shops-body');
+            tbody.innerHTML = data.top_shops.map((s, i) => `
                     <tr>
                         <td>${i + 1}</td>
                         <td style="font-weight:500;">${escapeHtml(s.name)}</td>
@@ -619,189 +914,189 @@
                         <td>${s.total_qty.toFixed(1)}</td>
                     </tr>
                 `).join('');
-                if (data.top_shops.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#64748b;">No data available yet.</td></tr>`;
+            if (data.top_shops.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#64748b;">No data available yet.</td></tr>`;
+            }
+
+        } catch (e) { console.error('Failed to load analytics', e); }
+    }
+
+    // --- Chat Module ---
+    async function initChat() {
+        try {
+            const res = await fetch('/api/chat_token', { method: 'POST' });
+            const data = await res.json();
+            chatJwt = data.token;
+            currentUserId = data.user_id;
+
+            chatSocket = io({ query: { token: chatJwt } });
+
+            chatSocket.on('connect', () => {
+                console.log('[Chat] Connected');
+                loadConversations();
+            });
+
+            chatSocket.on('new_message', (msg) => {
+                if (msg.conversation_id === activeConvId) {
+                    appendMessage(msg);
+                    chatSocket.emit('mark_read', { conversation_id: activeConvId });
+                } else {
+                    incrementUnread(msg.conversation_id);
                 }
+            });
 
-            } catch (e) { console.error('Failed to load analytics', e); }
-        }
+            chatSocket.on('new_order_alert', (data) => {
+                showToast(`📦 New order from ${data.shop_name}: ${data.product_name}`);
+                loadOrderSummaryCards();
+                // Force refresh cache in background so badges and data stay up to date
+                loadOrders(currentOrderFilter, true);
+            });
 
-        // --- Chat Module ---
-        async function initChat() {
-            try {
-                const res = await fetch('/api/chat_token', { method: 'POST' });
-                const data = await res.json();
-                chatJwt = data.token;
-                currentUserId = data.user_id;
+            chatSocket.on('joined', (data) => loadMessages(data.conversation_id));
+        } catch (e) { console.error('Chat init failed', e); }
+    }
 
-                chatSocket = io({ query: { token: chatJwt } });
+    async function loadConversations() {
+        try {
+            const res = await fetch('/api/conversations');
+            const data = await res.json();
+            const list = document.getElementById('conversation-list');
+            list.innerHTML = '';
+            let totalUnread = 0;
 
-                chatSocket.on('connect', () => {
-                    console.log('[Chat] Connected');
-                    loadConversations();
-                });
-
-                chatSocket.on('new_message', (msg) => {
-                    if (msg.conversation_id === activeConvId) {
-                        appendMessage(msg);
-                        chatSocket.emit('mark_read', { conversation_id: activeConvId });
-                    } else {
-                        incrementUnread(msg.conversation_id);
-                    }
-                });
-
-                chatSocket.on('new_order_alert', (data) => {
-                    showToast(`📦 New order from ${data.shop_name}: ${data.product_name}`);
-                    loadOrderSummaryCards();
-                    // Force refresh cache in background so badges and data stay up to date
-                    loadOrders(currentOrderFilter, true);
-                });
-
-                chatSocket.on('joined', (data) => loadMessages(data.conversation_id));
-            } catch (e) { console.error('Chat init failed', e); }
-        }
-
-        async function loadConversations() {
-            try {
-                const res  = await fetch('/api/conversations');
-                const data = await res.json();
-                const list = document.getElementById('conversation-list');
-                list.innerHTML = '';
-                let totalUnread = 0;
-
-                (data.conversations || []).forEach(conv => {
-                    totalUnread += conv.unread_count || 0;
-                    const item = document.createElement('div');
-                    item.className = 'conv-item';
-                    item.dataset.convId = conv.conversation_id;
-                    // Wholesaler sees the shop name instead of display name if desired, or just display_name
-                    item.innerHTML = `
+            (data.conversations || []).forEach(conv => {
+                totalUnread += conv.unread_count || 0;
+                const item = document.createElement('div');
+                item.className = 'conv-item';
+                item.dataset.convId = conv.conversation_id;
+                // Wholesaler sees the shop name instead of display name if desired, or just display_name
+                item.innerHTML = `
                         <div class="conv-name">${escapeHtml(conv.display_name)}</div>
                         <div class="conv-preview">${escapeHtml(conv.shop_name || '')}</div>
                         ${conv.unread_count > 0 ? `<div class="conv-unread">${conv.unread_count}</div>` : ''}
                     `;
-                    item.onclick = () => openConversation(conv.conversation_id, conv.display_name);
-                    list.appendChild(item);
-                });
-
-                const badge = document.getElementById('nav-badge-chat');
-                if (totalUnread > 0) {
-                    badge.textContent = totalUnread;
-                    badge.style.display = 'inline-block';
-                } else {
-                    badge.style.display = 'none';
-                }
-            } catch (e) { console.error('Load convs failed', e); }
-        }
-
-        function openConversation(convId, partnerName) {
-            activeConvId = convId;
-            document.getElementById('chat-placeholder').style.display = 'none';
-            document.getElementById('chat-window').style.display = 'flex';
-            document.getElementById('chat-partner-name').textContent = partnerName;
-            document.getElementById('chat-messages').innerHTML = '';
-
-            document.querySelectorAll('.conv-item').forEach(el => {
-                const isActive = parseInt(el.dataset.convId) === convId;
-                el.classList.toggle('active', isActive);
-                if (isActive) {
-                    const badge = el.querySelector('.conv-unread');
-                    if (badge) badge.remove();
-                }
+                item.onclick = () => openConversation(conv.conversation_id, conv.display_name);
+                list.appendChild(item);
             });
 
-            chatSocket.emit('join_conversation', { conversation_id: convId });
-        }
+            const badge = document.getElementById('nav-badge-chat');
+            if (totalUnread > 0) {
+                badge.textContent = totalUnread;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        } catch (e) { console.error('Load convs failed', e); }
+    }
 
-        async function loadMessages(convId) {
-            try {
-                const res  = await fetch(`/api/conversations/${convId}/messages?limit=50`);
-                const data = await res.json();
-                const box  = document.getElementById('chat-messages');
-                box.innerHTML = '';
-                (data.messages || []).forEach(msg => appendMessage(msg, false));
-                box.scrollTop = box.scrollHeight;
-                chatSocket.emit('mark_read', { conversation_id: convId });
-            } catch (e) { console.error('Load messages failed', e); }
-        }
+    function openConversation(convId, partnerName) {
+        activeConvId = convId;
+        document.getElementById('chat-placeholder').style.display = 'none';
+        document.getElementById('chat-window').style.display = 'flex';
+        document.getElementById('chat-partner-name').textContent = partnerName;
+        document.getElementById('chat-messages').innerHTML = '';
 
-        function appendMessage(msg, scroll = true) {
-            const box    = document.getElementById('chat-messages');
-            const isMine = msg.sender_id === currentUserId;
-            const div    = document.createElement('div');
-            const time   = new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-            
-            let extraHtml = '';
-            if (msg.message_type === 'order_suggestion' && !isMine) {
-                const productMatch = msg.text.match(/LOW STOCK ALERT: (.+)/);
-                const qtyMatch     = msg.text.match(/Suggested order: ([\d.]+)/);
-                if (productMatch) {
-                    extraHtml = `
+        document.querySelectorAll('.conv-item').forEach(el => {
+            const isActive = parseInt(el.dataset.convId) === convId;
+            el.classList.toggle('active', isActive);
+            if (isActive) {
+                const badge = el.querySelector('.conv-unread');
+                if (badge) badge.remove();
+            }
+        });
+
+        chatSocket.emit('join_conversation', { conversation_id: convId });
+    }
+
+    async function loadMessages(convId) {
+        try {
+            const res = await fetch(`/api/conversations/${convId}/messages?limit=50`);
+            const data = await res.json();
+            const box = document.getElementById('chat-messages');
+            box.innerHTML = '';
+            (data.messages || []).forEach(msg => appendMessage(msg, false));
+            box.scrollTop = box.scrollHeight;
+            chatSocket.emit('mark_read', { conversation_id: convId });
+        } catch (e) { console.error('Load messages failed', e); }
+    }
+
+    function appendMessage(msg, scroll = true) {
+        const box = document.getElementById('chat-messages');
+        const isMine = msg.sender_id === currentUserId;
+        const div = document.createElement('div');
+        const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let extraHtml = '';
+        if (msg.message_type === 'order_suggestion' && !isMine) {
+            const productMatch = msg.text.match(/LOW STOCK ALERT: (.+)/);
+            const qtyMatch = msg.text.match(/Suggested order: ([\d.]+)/);
+            if (productMatch) {
+                extraHtml = `
                         <div style="margin-top:8px;">
                             <button onclick="quickCreateOrder(${msg.conversation_id}, '${escapeHtml(productMatch[1])}', ${qtyMatch ? qtyMatch[1] : 0})" class="btn" style="height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; background: white; color: var(--text-primary); border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;"><i data-lucide="external-link" style="width: 14px; height: 14px;"></i> View Order Details</button>
                         </div>`;
-                }
             }
-
-            const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
-            div.className = `msg-bubble ${isMine ? 'mine' : 'theirs'} ${typeClass}`;
-            
-            let cleanedText = msg.text.replace(/📦/g, '');
-            let safeText = escapeHtml(cleanedText).trim();
-            if (safeText.includes('LOW STOCK ALERT:') || safeText.includes('BULK RESTOCK ORDER') || safeText.includes('ORDER DISPATCHED:')) {
-                 safeText = `<div style="display:flex; gap:6px; align-items:start;"><i data-lucide="bell" style="width:16px; height:16px; flex-shrink:0; margin-top:2px;"></i><div>${safeText}</div></div>`;
-            }
-
-            div.innerHTML  = `${safeText}${extraHtml}<div class="msg-time">${time}</div>`;
-            box.appendChild(div);
-            if (scroll) box.scrollTop = box.scrollHeight;
-            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
-        function sendChatMessage() {
-            const input = document.getElementById('chat-input');
-            const text  = input.value.trim();
-            if (!text || !activeConvId || !chatSocket) return;
-            chatSocket.emit('send_message', {
-                conversation_id: activeConvId,
-                text:            text,
-                message_type:    'text',
-            });
-            input.value = '';
+        const typeClass = msg.message_type !== 'text' ? msg.message_type : '';
+        div.className = `msg-bubble ${isMine ? 'mine' : 'theirs'} ${typeClass}`;
+
+        let cleanedText = msg.text.replace(/📦/g, '');
+        let safeText = escapeHtml(cleanedText).trim();
+        if (safeText.includes('LOW STOCK ALERT:') || safeText.includes('BULK RESTOCK ORDER') || safeText.includes('ORDER DISPATCHED:')) {
+            safeText = `<div style="display:flex; gap:6px; align-items:start;"><i data-lucide="bell" style="width:16px; height:16px; flex-shrink:0; margin-top:2px;"></i><div>${safeText}</div></div>`;
         }
 
-        function incrementUnread(convId) {
-            const item = document.querySelector(`.conv-item[data-conv-id="${convId}"]`);
-            if (item) {
-                let badge = item.querySelector('.conv-unread');
-                if (!badge) {
-                    badge = document.createElement('div');
-                    badge.className = 'conv-unread';
-                    badge.textContent = '0';
-                    item.appendChild(badge);
-                }
-                badge.textContent = parseInt(badge.textContent) + 1;
+        div.innerHTML = `${safeText}${extraHtml}<div class="msg-time">${time}</div>`;
+        box.appendChild(div);
+        if (scroll) box.scrollTop = box.scrollHeight;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (!text || !activeConvId || !chatSocket) return;
+        chatSocket.emit('send_message', {
+            conversation_id: activeConvId,
+            text: text,
+            message_type: 'text',
+        });
+        input.value = '';
+    }
+
+    function incrementUnread(convId) {
+        const item = document.querySelector(`.conv-item[data-conv-id="${convId}"]`);
+        if (item) {
+            let badge = item.querySelector('.conv-unread');
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'conv-unread';
+                badge.textContent = '0';
+                item.appendChild(badge);
             }
-            const navBadge = document.getElementById('nav-badge-chat');
-            navBadge.textContent = (parseInt(navBadge.textContent) || 0) + 1;
-            navBadge.style.display = 'inline-block';
+            badge.textContent = parseInt(badge.textContent) + 1;
         }
+        const navBadge = document.getElementById('nav-badge-chat');
+        navBadge.textContent = (parseInt(navBadge.textContent) || 0) + 1;
+        navBadge.style.display = 'inline-block';
+    }
 
-        // Load recent pending orders for dashboard view
-        async function loadRecentOrders() {
-            try {
-                const res = await fetch('/api/wholesaler/orders');
-                const data = await res.json();
-                const orders = (data.orders || []).filter(o => o.status === 'pending').slice(0, 5);
-                const container = document.getElementById('recent-orders-list');
-                if (!container) return;
-                
-                if (orders.length === 0) {
-                    container.innerHTML = '<div class="text-center text-secondary" style="padding: var(--space-4);">No pending orders right now.</div>';
-                    return;
-                }
-                
-                container.innerHTML = orders.map(o => `
+    // Load recent pending orders for dashboard view
+    async function loadRecentOrders() {
+        try {
+            const res = await fetch('/api/wholesaler/orders');
+            const data = await res.json();
+            const orders = (data.orders || []).filter(o => o.status === 'pending').slice(0, 5);
+            const container = document.getElementById('recent-orders-list');
+            if (!container) return;
+
+            if (orders.length === 0) {
+                container.innerHTML = '<div class="text-center text-secondary" style="padding: var(--space-4);">No pending orders right now.</div>';
+                return;
+            }
+
+            container.innerHTML = orders.map(o => `
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-3) 0; border-bottom: 1px solid var(--border);">
                         <div>
                             <div style="font-weight: 500; font-size: 14px;">${escapeHtml(o.product_name)}</div>
@@ -810,28 +1105,79 @@
                         <span class="badge badge-warning">Pending</span>
                     </div>
                 `).join('');
-            } catch (e) { console.error('Load recent orders failed', e); }
-        }
+        } catch (e) { console.error('Load recent orders failed', e); }
+    }
 
-        // Initial Load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadOrderSummaryCards();
-            loadOrders('pending', true);
-            // Connect to chat socket behind the scenes to receive real-time alerts
-            initChat();
-        });
-    </script>
+    // Initial Load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadOrderSummaryCards();
+        loadOrders('pending', true);
+        // Connect to chat socket behind the scenes to receive real-time alerts
+        initChat();
+    });
+</script>
 <style>
-    #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
-    .empty-state { text-align: center; padding: var(--space-6); color: var(--text-secondary); }
-    .order-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    .order-badge.pending { background: var(--warning-muted, #fef3c7); color: var(--warning, #d97706); }
-    .order-badge.confirmed { background: var(--accent-muted); color: var(--accent); }
-    .order-badge.dispatched { background: var(--success-muted, #d1fae5); color: var(--success, #059669); }
-    .order-badge.rejected { background: var(--danger-muted, #fee2e2); color: var(--danger, #dc2626); }
-    .btn-action { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; color: white; font-size: 13px; }
-    .btn-confirm { background: var(--success); }
-    .btn-dispatch { background: var(--accent); }
-    .btn-reject { background: var(--danger); }
+    #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: var(--space-6);
+        color: var(--text-secondary);
+    }
+
+    .order-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .order-badge.pending {
+        background: var(--warning-muted, #fef3c7);
+        color: var(--warning, #d97706);
+    }
+
+    .order-badge.confirmed {
+        background: var(--accent-muted);
+        color: var(--accent);
+    }
+
+    .order-badge.dispatched {
+        background: var(--success-muted, #d1fae5);
+        color: var(--success, #059669);
+    }
+
+    .order-badge.rejected {
+        background: var(--danger-muted, #fee2e2);
+        color: var(--danger, #dc2626);
+    }
+
+    .btn-action {
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+        color: white;
+        font-size: 13px;
+    }
+
+    .btn-confirm {
+        background: var(--success);
+    }
+
+    .btn-dispatch {
+        background: var(--accent);
+    }
+
+    .btn-reject {
+        background: var(--danger);
+    }
 </style>
 {% endblock %}

@@ -79,10 +79,10 @@
     {% endfor %}
     {% else %}
     <div class="empty-state text-center" style="grid-column: 1 / -1; padding: var(--space-8);">
-        <div class="flex justify-center mb-3">
-            <i data-lucide="check-circle" style="width: 48px; height: 48px; color: var(--success); opacity: 0.8;"></i>
+        <div class="flex items-center gap-3 mb-1" style="justify-content: center;">
+            <i data-lucide="check-circle" style="width: 32px; height: 32px; color: var(--success); opacity: 0.8;"></i>
+            <h2 style="font-size: 18px; font-weight: 600; margin: 0;">Inventory is healthy!</h2>
         </div>
-        <h2 style="font-size: 18px; font-weight: 600;">Inventory is healthy!</h2>
         <p class="text-secondary mt-1">No items are currently below the critical threshold.</p>
     </div>
     {% endif %}
