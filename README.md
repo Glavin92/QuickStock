@@ -113,10 +113,4 @@ DATABASE_URL=postgresql://postgres:postgres_password@localhost:5432/quickstock
     ```
 
 ---
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
 Developed by **Glavin** | © 2026 QuickStock™
