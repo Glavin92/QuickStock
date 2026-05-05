@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: quickstock_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: quickstock
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
